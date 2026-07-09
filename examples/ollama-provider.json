@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "name": "ollama-local",
+  "version": "0.1.0",
+  "kind": "external",
+  "description": "Register a local Ollama server as an LLM backend.",
+  "providers": [
+    {
+      "id": "ollama",
+      "display_name": "Ollama (local)",
+      "endpoint": "http://localhost:11434/v1",
+      "auth_env": null,
+      "default_model": "llama3.1"
+    }
+  ]
+}

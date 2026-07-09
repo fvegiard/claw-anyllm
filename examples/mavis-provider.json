@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "name": "mavis-bridge",
+  "version": "0.1.0",
+  "kind": "external",
+  "description": "Register Mavis (or any compatible OpenAI-shaped API) as an LLM backend.",
+  "providers": [
+    {
+      "id": "mavis",
+      "display_name": "Mavis",
+      "endpoint": "https://api.example.com/v1",
+      "auth_env": "MAVIS_TOKEN",
+      "default_model": "MiniMax-M3"
+    }
+  ]
+}

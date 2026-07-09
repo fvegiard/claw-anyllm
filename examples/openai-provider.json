@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "name": "openai-direct",
+  "version": "0.1.0",
+  "kind": "external",
+  "description": "Register the OpenAI API directly. Use this when you don't want to route through the agent server.",
+  "providers": [
+    {
+      "id": "openai",
+      "display_name": "OpenAI",
+      "endpoint": "https://api.openai.com/v1",
+      "auth_env": "OPENAI_API_KEY",
+      "default_model": "gpt-4o"
+    }
+  ]
+}
