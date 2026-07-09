@@ -2473,7 +2473,7 @@ fn parse_single_word_command_alias(
             // Prompt shorthand like `claw --model opus explain this` should keep
             // flowing to Prompt dispatch even when the first token is also a
             // slash-command name.
-            if model_flag_raw.is_none() {
+            if model_flag_raw.is_none() && !is_known_top_level_subcommand(first) {
                 if let Some(guidance) = bare_slash_command_guidance(first) {
                     let extra = rest[1..].join(" ");
                     return Some(Err(format!(
