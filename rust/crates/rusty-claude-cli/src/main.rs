@@ -10704,7 +10704,7 @@ fn render_doctor_help_json() -> serde_json::Value {
         "requires_session_resume": false,
         "mutates_workspace": false,
         "output_fields": ["kind", "action", "status", "message", "report", "has_failures", "summary", "checks", "allowed_tools"],
-        "check_names": ["auth", "config", "mcp validation", "mcp config form", "hook validation", "install source", "workspace", "memory", "boot preflight", "sandbox", "permissions", "system", "Agent SDK", "Python eval", "Fleet deps", "Linux VM", "Project router", "Todo discipline"],
+        "check_names": ["auth", "config", "mcp validation", "mcp config form", "hook validation", "install source", "workspace", "memory", "boot preflight", "sandbox", "permissions", "system", "agent sdk", "python eval", "fleet deps", "linux vm", "project router", "todo discipline"],
         "status_values": ["ok", "warn", "fail"],
         "options": [
             {
@@ -14924,6 +14924,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15058,6 +15059,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15149,6 +15151,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15171,6 +15174,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15187,6 +15191,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15203,6 +15208,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15241,6 +15247,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -15256,6 +15263,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15299,6 +15307,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15387,6 +15396,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15408,6 +15418,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15438,6 +15449,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15465,6 +15477,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15641,6 +15654,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -17076,6 +17090,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -17147,6 +17162,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -17174,6 +17190,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -17309,6 +17326,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -17328,6 +17346,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -17357,6 +17376,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -19438,8 +19458,9 @@ UU conflicted.rs",
             .expect("plugin install should succeed");
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("plugin state should load");
         let pre_hooks = state.feature_config.hooks().pre_tool_use();
         assert_eq!(pre_hooks.len(), 1);
         assert!(
@@ -19483,8 +19504,9 @@ UU conflicted.rs",
 
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("runtime plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("runtime plugin state should load");
 
         let allowed = state
             .tool_registry
@@ -19590,8 +19612,9 @@ UU conflicted.rs",
 
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("runtime plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("runtime plugin state should load");
         let mut executor = CliToolExecutor::new(
             None,
             false,
@@ -19646,7 +19669,7 @@ UU conflicted.rs",
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
         let runtime_plugin_state =
-            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
                 .expect("plugin state should load");
         let mut runtime = build_runtime_with_plugin_state(
             Session::new(),

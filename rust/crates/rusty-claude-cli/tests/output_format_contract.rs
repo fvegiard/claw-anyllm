@@ -1476,7 +1476,7 @@ fn doctor_and_resume_status_emit_json_when_requested() {
         .is_some_and(|available| available.iter().any(|name| name == "web_fetch")));
 
     let checks = doctor["checks"].as_array().expect("doctor checks");
-    assert_eq!(checks.len(), 12);
+    assert_eq!(checks.len(), 19);
     let check_names = checks
         .iter()
         .map(|check| {
@@ -1507,7 +1507,13 @@ fn doctor_and_resume_status_emit_json_when_requested() {
             "boot preflight",
             "sandbox",
             "permissions",
-            "system"
+            "system",
+            "agent sdk",
+            "python eval",
+            "fleet deps",
+            "linux vm",
+            "project router",
+            "todo discipline"
         ]
     );
 

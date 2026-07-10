@@ -55,9 +55,13 @@ pub fn default_workspace_root() -> PathBuf {
 
 fn resolve_compose_file() -> Option<PathBuf> {
     let cwd = std::env::current_dir().ok()?;
-    [cwd.join("docker-compose.yml"), cwd.join("compose.yml"), cwd.join("../docker-compose.yml")]
-        .into_iter()
-        .find(|candidate| candidate.is_file())
+    [
+        cwd.join("docker-compose.yml"),
+        cwd.join("compose.yml"),
+        cwd.join("../docker-compose.yml"),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
 }
 
 fn compose_base_args(compose_file: &Path) -> Vec<String> {
