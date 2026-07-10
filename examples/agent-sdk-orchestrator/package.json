@@ -1,0 +1,21 @@
+{
+  "name": "claw-agent-sdk-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vibe-coder orchestrator powered by @anthropic-ai/claude-agent-sdk — nested subagents, vision, web research, hooks, Workflow, and dynamic MCP.",
+  "type": "module",
+  "scripts": {
+    "orchestrate": "tsx src/orchestrator.ts",
+    "orchestrate:json": "tsx src/orchestrator.ts --output-format json"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.149"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

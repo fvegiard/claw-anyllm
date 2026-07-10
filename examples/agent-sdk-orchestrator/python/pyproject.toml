@@ -1,0 +1,20 @@
+[project]
+name = "claw-autonomous-evaluator"
+version = "0.1.0"
+description = "3D vision + IF decision engine for autonomous orchestration"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+vision = ["opencv-python-headless>=4.9"]
+full = ["opencv-python-headless>=4.9", "scikit-image>=0.22"]
+
+[project.scripts]
+claw-evaluate = "claw_eval.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["claw_eval*"]

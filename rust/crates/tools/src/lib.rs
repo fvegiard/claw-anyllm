@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use aspect_macros::aspect;
 use aspect_std::LoggingAspect;
 
+use agent_sdk_bridge::{run_agent_sdk_bridge, should_delegate_to_agent_sdk, AgentSdkBridgeInput};
 use api::{
     max_tokens_for_model, model_family_identity_for, resolve_model_alias, ApiError,
     ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest, MessageResponse,
@@ -669,7 +670,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "Agent",
-            description: "Launch a specialized agent task and persist its handoff metadata.",
+            description: "Launch a specialized agent. Set CLAW_AGENT_SDK=1 or subagent_type sdk:* to use @anthropic-ai/claude-agent-sdk (nested subagents, Workflow, vision, Python 3D eval). Otherwise runs in-process Rust subagent.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -4118,6 +4119,74 @@ fn execute_agent(input: AgentInput) -> Result<AgentOutput, String> {
     execute_agent_with_spawn(input, spawn_agent_job)
 }
 
+fn execute_agent_via_sdk_bridge(input: AgentInput) -> Result<AgentOutput, String> {
+    let bridge_input = AgentSdkBridgeInput {
+        description: input.description.clone(),
+        prompt: input.prompt.clone(),
+        subagent_type: input.subagent_type.clone(),
+        name: input.name.clone(),
+        model: input.model.clone(),
+    };
+    let raw = run_agent_sdk_bridge(&bridge_input)?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|error| format!("agent sdk returned invalid json: {error}"))?;
+
+    let agent_id = make_agent_id();
+    let output_dir = agent_store_dir()?;
+    std::fs::create_dir_all(&output_dir).map_err(|error| error.to_string())?;
+    let output_file = output_dir.join(format!("{agent_id}.md"));
+    let manifest_file = output_dir.join(format!("{agent_id}.json"));
+    let created_at = iso8601_now();
+    let status = parsed
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("completed");
+    let result_text = parsed
+        .get("result")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let error_text = parsed
+        .get("error")
+        .and_then(serde_json::Value::as_str);
+    let subagent = parsed
+        .get("subagent")
+        .and_then(serde_json::Value::as_str)
+        .or(input.subagent_type.as_deref())
+        .map(str::to_string);
+
+    std::fs::write(
+        &output_file,
+        format!(
+            "# Agent SDK Task\n\n- id: {agent_id}\n- status: {status}\n- agent_sdk: true\n\n## Result\n\n{result_text}\n"
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+
+    let terminal_status = if status == "error" { "failed" } else { "completed" };
+    let manifest = AgentOutput {
+        agent_id,
+        name: input
+            .name
+            .clone()
+            .unwrap_or_else(|| String::from("agent-sdk")),
+        description: input.description,
+        subagent_type: subagent,
+        model: input.model,
+        status: terminal_status.to_string(),
+        output_file: output_file.display().to_string(),
+        manifest_file: manifest_file.display().to_string(),
+        created_at: created_at.clone(),
+        started_at: Some(created_at.clone()),
+        completed_at: Some(iso8601_now()),
+        lane_events: vec![LaneEvent::started(created_at)],
+        current_blocker: None,
+        derived_state: terminal_status.to_string(),
+        error: error_text.map(str::to_string),
+    };
+    write_agent_manifest(&manifest)?;
+    Ok(manifest)
+}
+
 fn execute_agent_with_spawn<F>(input: AgentInput, spawn_fn: F) -> Result<AgentOutput, String>
 where
     F: FnOnce(AgentJob) -> Result<(), String>,
@@ -4127,6 +4196,10 @@ where
     }
     if input.prompt.trim().is_empty() {
         return Err(String::from("prompt must not be empty"));
+    }
+
+    if should_delegate_to_agent_sdk(input.subagent_type.as_deref()) {
+        return execute_agent_via_sdk_bridge(input);
     }
 
     let agent_id = make_agent_id();
@@ -4336,6 +4409,16 @@ fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
             "glob_search",
             "grep_search",
             "ToolSearch",
+        ],
+        "VisionLooker" => vec![
+            "read_file",
+            "glob_search",
+            "grep_search",
+            "WebFetch",
+            "WebSearch",
+            "bash",
+            "ToolSearch",
+            "StructuredOutput",
         ],
         _ => vec![
             "bash",
@@ -5743,6 +5826,8 @@ fn normalize_subagent_type(subagent_type: Option<&str>) -> String {
         }
         "clawguide" | "clawguideagent" | "guide" => String::from("claw-guide"),
         "statusline" | "statuslinesetup" => String::from("statusline-setup"),
+        "visionlooker" | "visionlookeragent" | "multimodallooker" => String::from("VisionLooker"),
+        "agentsdk" | "sdkorchestrator" => String::from("sdk:vibe-orchestrator"),
         _ => trimmed.to_string(),
     }
 }
@@ -6848,6 +6933,7 @@ fn parse_skill_description(contents: &str) -> Option<String> {
     None
 }
 
+pub mod agent_sdk_bridge;
 pub mod lane_completion;
 pub mod openhands;
 pub mod pdf_extract;

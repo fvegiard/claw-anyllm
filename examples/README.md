@@ -9,6 +9,21 @@ to extend the harness.
 | `openai-provider.json` | OpenAI direct | `OPENAI_API_KEY` env var | `gpt-4o` |
 | `ollama-provider.json` | Local Ollama | none | `llama3.1` |
 | `ecosystem-mcp-starter.json` | Top GitHub MCP bundle (filesystem, GitHub, fetch, Playwright browser, Context7 docs, sequential-thinking) | per-server env vars | n/a (MCP config only) |
+| `agent-sdk-orchestrator/` | TypeScript `@anthropic-ai/claude-agent-sdk` + Python 3D/IF evaluator | `ANTHROPIC_API_KEY`, optional `CLAW_AGENT_SDK=1` | nested SDK subagents |
+| `n8n-claw-webhook-workflow.json` | n8n webhook → SDK orchestrator | n8n + Node 20+ | autonomous via webhook |
+
+## Agent SDK orchestrator (not a normal subagent)
+
+When `CLAW_AGENT_SDK=1`, claw's `Agent` tool delegates to the TypeScript SDK instead of the in-process Rust thread:
+
+```bash
+export CLAW_AGENT_SDK=1
+export ANTHROPIC_API_KEY="..."
+cd examples/agent-sdk-orchestrator && npm install
+claw prompt "Use sdk:vibe-orchestrator — fix the header and verify UI with vision"
+```
+
+Python evaluator (`uv run` or `python3 -m claw_eval.cli`) scores moves on 3 axes (vision, correctness, safety) with explicit IF rules — chess-style best move.
 
 ## Ecosystem MCP starter
 
