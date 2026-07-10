@@ -8,6 +8,43 @@ to extend the harness.
 | `mavis-provider.json`  | Mavis (or any OpenAI-compatible API) | `MAVIS_TOKEN` env var | `MiniMax-M3` |
 | `openai-provider.json` | OpenAI direct | `OPENAI_API_KEY` env var | `gpt-4o` |
 | `ollama-provider.json` | Local Ollama | none | `llama3.1` |
+| `ecosystem-mcp-starter.json` | Top GitHub MCP bundle (filesystem, GitHub, fetch, Playwright browser, Context7 docs, sequential-thinking) | per-server env vars | n/a (MCP config only) |
+| `agent-sdk-orchestrator/` | TypeScript `@anthropic-ai/claude-agent-sdk` + Python 3D/IF evaluator | `ANTHROPIC_API_KEY`, optional `CLAW_AGENT_SDK=1` | nested SDK subagents |
+| `n8n-claw-webhook-workflow.json` | n8n webhook → SDK orchestrator | n8n + Node 20+ | autonomous via webhook |
+
+## Agent SDK orchestrator (not a normal subagent)
+
+When `CLAW_AGENT_SDK=1`, claw's `Agent` tool delegates to the TypeScript SDK instead of the in-process Rust thread:
+
+```bash
+export CLAW_AGENT_SDK=1
+export ANTHROPIC_API_KEY="..."
+cd examples/agent-sdk-orchestrator && npm install
+claw prompt "Use sdk:vibe-orchestrator — fix the header and verify UI with vision"
+```
+
+Python evaluator (`uv run` or `python3 -m claw_eval.cli`) scores moves on 3 axes (vision, correctness, safety) with explicit IF rules — chess-style best move.
+
+## Ecosystem MCP starter
+
+`ecosystem-mcp-starter.json` is a batteries-included `.claw/settings.json` fragment that wires the highest-signal MCP servers from the official MCP registry and community leaderboards:
+
+- **filesystem** — workspace file ops (official MCP reference server)
+- **github** — issues, PRs, repo search (`GITHUB_PERSONAL_ACCESS_TOKEN`)
+- **fetch** — web content for RAG-style retrieval
+- **playwright** — headless browser automation (beats raw Puppeteer MCP token tax for agents)
+- **context7** — live library/docs lookup (top community docs MCP)
+- **sequential-thinking** — structured reasoning scaffold
+
+```bash
+mkdir -p .claw
+cp ecosystem-mcp-starter.json .claw/settings.json
+# Set tokens as needed, then:
+claw doctor --output-format json
+claw mcp list --output-format json
+```
+
+Claw uses flat `mcpServers`, not VS Code / Hermes nested `mcp.servers`. `claw doctor` warns if it detects the wrong shape.
 
 ## Install
 

@@ -18,6 +18,8 @@ pub struct ConfigDiagnostic {
 pub enum DiagnosticKind {
     UnknownKey {
         suggestion: Option<String>,
+        /// Extra remediation when a known ecosystem convention diverges from claw's schema.
+        remediation: Option<&'static str>,
     },
     WrongType {
         expected: &'static str,
@@ -34,15 +36,39 @@ impl std::fmt::Display for ConfigDiagnostic {
             .line
             .map_or_else(String::new, |line| format!(" (line {line})"));
         match &self.kind {
-            DiagnosticKind::UnknownKey { suggestion: None } => {
+            DiagnosticKind::UnknownKey {
+                suggestion: None,
+                remediation: None,
+            } => {
                 write!(f, "{}: unknown key \"{}\"{location}", self.path, self.field)
             }
             DiagnosticKind::UnknownKey {
+                suggestion: None,
+                remediation: Some(note),
+            } => {
+                write!(
+                    f,
+                    "{}: unknown key \"{}\"{location}. {note}",
+                    self.path, self.field
+                )
+            }
+            DiagnosticKind::UnknownKey {
                 suggestion: Some(hint),
+                remediation: None,
             } => {
                 write!(
                     f,
                     "{}: unknown key \"{}\"{location}. Did you mean \"{}\"?",
+                    self.path, self.field, hint
+                )
+            }
+            DiagnosticKind::UnknownKey {
+                suggestion: Some(hint),
+                remediation: Some(note),
+            } => {
+                write!(
+                    f,
+                    "{}: unknown key \"{}\"{location}. Did you mean \"{}\"? {note}",
                     self.path, self.field, hint
                 )
             }
@@ -425,12 +451,15 @@ fn validate_object_keys(
         } else if DEPRECATED_FIELDS.iter().any(|d| d.name == key) {
             // Deprecated key — handled separately, not an unknown-key error.
         } else {
-            let suggestion = suggest_field(key, &known_names);
+            let (suggestion, remediation) = unknown_key_guidance(key, prefix, &known_names);
             result.warnings.push(ConfigDiagnostic {
                 path: path_display.to_string(),
                 field: field_path,
                 line: find_key_line(source, key),
-                kind: DiagnosticKind::UnknownKey { suggestion },
+                kind: DiagnosticKind::UnknownKey {
+                    suggestion,
+                    remediation,
+                },
             });
         }
     }
@@ -438,8 +467,54 @@ fn validate_object_keys(
     result
 }
 
+const MCP_NESTED_FORM_REMEDIATION: &str = "claw uses the flat camelCase form \"mcpServers\" instead of VS Code / Hermes-style \"mcp.servers\". Rewrite as: { \"mcpServers\": { ... } }";
+
+/// Remediation text when a config uses nested `mcp` instead of flat `mcpServers`.
+pub const MCP_CONFIG_FORM_DRIFT_HINT: &str = MCP_NESTED_FORM_REMEDIATION;
+
+fn unknown_key_guidance(
+    key: &str,
+    prefix: &str,
+    candidates: &[&str],
+) -> (Option<String>, Option<&'static str>) {
+    if prefix.is_empty() && key.eq_ignore_ascii_case("mcp") {
+        return (
+            Some("mcpServers".to_string()),
+            Some(MCP_NESTED_FORM_REMEDIATION),
+        );
+    }
+    (suggest_field(key, candidates), None)
+}
+
+/// Detect top-level `mcp` blocks copied from VS Code, Hermes, or other nested-form tools.
+#[must_use]
+pub fn find_mcp_config_form_drift(object: &BTreeMap<String, JsonValue>) -> Option<&'static str> {
+    object
+        .contains_key("mcp")
+        .then_some(MCP_NESTED_FORM_REMEDIATION)
+}
+
+/// Same as [`find_mcp_config_form_drift`] for a parsed config root value.
+#[must_use]
+pub fn json_value_has_mcp_config_form_drift(value: &JsonValue) -> Option<&'static str> {
+    value.as_object().and_then(find_mcp_config_form_drift)
+}
+
 fn suggest_field(input: &str, candidates: &[&str]) -> Option<String> {
     let input_lower = input.to_ascii_lowercase();
+
+    // Prefix beats edit-distance: `mcp` must suggest `mcpServers`, not `env`.
+    if input.len() >= 2 {
+        if let Some(candidate) = candidates.iter().find(|candidate| {
+            let candidate_lower = candidate.to_ascii_lowercase();
+            candidate_lower.starts_with(&input_lower)
+                && candidate_lower.len() > input_lower.len()
+                && candidate.len() <= input.len().saturating_mul(4)
+        }) {
+            return Some((*candidate).to_string());
+        }
+    }
+
     candidates
         .iter()
         .filter_map(|candidate| {
@@ -882,6 +957,7 @@ mod tests {
         match &result.warnings[0].kind {
             DiagnosticKind::UnknownKey {
                 suggestion: Some(s),
+                remediation: None,
             } => assert_eq!(s, "model"),
             other => panic!("expected suggestion, got {other:?}"),
         }
@@ -958,7 +1034,10 @@ mod tests {
             path: "/test/settings.json".to_string(),
             field: "badKey".to_string(),
             line: Some(5),
-            kind: DiagnosticKind::UnknownKey { suggestion: None },
+            kind: DiagnosticKind::UnknownKey {
+                suggestion: None,
+                remediation: None,
+            },
         };
 
         // when
@@ -996,7 +1075,6 @@ mod tests {
 
     #[test]
     fn display_format_deprecated_with_line() {
-        // given
         let diag = ConfigDiagnostic {
             path: "/test/settings.json".to_string(),
             field: "permissionMode".to_string(),
@@ -1006,13 +1084,46 @@ mod tests {
             },
         };
 
-        // when
-        let output = diag.to_string();
-
-        // then
         assert_eq!(
-            output,
+            diag.to_string(),
             r#"/test/settings.json: field "permissionMode" is deprecated (line 3). Use "permissions.defaultMode" instead"#
         );
+    }
+
+    #[test]
+    fn suggests_mcp_servers_for_nested_mcp_key_not_env() {
+        let source = r#"{"mcp": {"servers": {"a": {"command": "x"}}}}"#;
+        let parsed = JsonValue::parse(source).expect("valid json");
+        let object = parsed.as_object().expect("object");
+
+        let result = validate_config_file(object, source, &test_path());
+
+        assert!(result.errors.is_empty());
+        assert_eq!(result.warnings.len(), 1);
+        match &result.warnings[0].kind {
+            DiagnosticKind::UnknownKey {
+                suggestion: Some(s),
+                remediation: Some(note),
+            } => {
+                assert_eq!(s, "mcpServers");
+                assert!(note.contains("mcpServers"));
+                assert!(note.contains("Hermes"));
+            }
+            other => panic!("expected mcpServers suggestion, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn suggest_field_prefers_prefix_over_edit_distance() {
+        let names: Vec<&str> = TOP_LEVEL_FIELDS.iter().map(|f| f.name).collect();
+        assert_eq!(suggest_field("mcp", &names), Some("mcpServers".to_string()));
+        assert_ne!(suggest_field("mcp", &names), Some("env".to_string()));
+    }
+
+    #[test]
+    fn find_mcp_config_form_drift_detects_top_level_mcp_block() {
+        let mut object = BTreeMap::new();
+        object.insert("mcp".to_string(), JsonValue::Object(BTreeMap::new()));
+        assert!(find_mcp_config_form_drift(&object).is_some());
     }
 }

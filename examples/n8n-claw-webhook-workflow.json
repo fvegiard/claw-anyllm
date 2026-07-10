@@ -1,0 +1,43 @@
+{
+  "name": "Claw Agent SDK Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "claw-orchestrate",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd {{ $env.CLAW_REPO || '/workspace' }}/examples/agent-sdk-orchestrator && echo '{{ JSON.stringify({ prompt: $json.body.prompt || $json.body.message, agent: $json.body.agent || \"vibe-orchestrator\", include_mcp: true }) }}' | npm run orchestrate:json"
+      },
+      "name": "Run SDK Orchestrator",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Run SDK Orchestrator", "type": "main", "index": 0 }]]
+    },
+    "Run SDK Orchestrator": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  }
+}
