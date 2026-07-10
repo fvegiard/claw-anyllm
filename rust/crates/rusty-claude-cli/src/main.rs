@@ -2460,9 +2460,7 @@ fn parse_single_word_command_alias(
         return Some(Ok(CliAction::Help { output_format }));
     }
 
-    // #453: fire guard for multi-word CLI subcommands too (claw cost list, claw model list, etc.)
-    // For slash commands that are commonly used as prompts (explain, cost, tokens, etc.),
-    // only fire the guard when there's exactly one token.
+    // #453/#119: fire guard for multi-word slash-only verbs (claw cost list, claw hooks --help, etc.)
     if rest.is_empty() {
         return None;
     }
@@ -2470,8 +2468,22 @@ fn parse_single_word_command_alias(
     const CLI_SUBCOMMANDS: &[&str] = &[
         "help", "version", "status", "sandbox", "doctor", "state", "config", "diff",
     ];
-    if rest.len() > 1 && !CLI_SUBCOMMANDS.contains(&rest[0].as_str()) {
-        return None;
+    if rest.len() > 1 {
+        let first = rest[0].as_str();
+        if !CLI_SUBCOMMANDS.contains(&first) {
+            // Prompt shorthand like `claw --model opus explain this` should keep
+            // flowing to Prompt dispatch even when the first token is also a
+            // slash-command name.
+            if model_flag_raw.is_none() {
+                if let Some(guidance) = bare_slash_command_guidance(first) {
+                    let extra = rest[1..].join(" ");
+                    return Some(Err(format!(
+                        "{guidance}\nThe extra argument(s) `{extra}` were not recognized."
+                    )));
+                }
+            }
+            return None;
+        }
     }
 
     match rest[0].as_str() {
@@ -14748,6 +14760,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -14882,6 +14895,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -14973,6 +14987,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -14995,6 +15010,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15011,6 +15027,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15027,6 +15044,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15065,6 +15083,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -15080,6 +15099,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15123,6 +15143,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15211,6 +15232,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15232,6 +15254,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15262,6 +15285,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15289,6 +15313,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15465,6 +15490,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -16875,6 +16901,36 @@ mod tests {
     }
 
     #[test]
+    fn multi_word_slash_command_names_return_guidance_instead_of_hitting_prompt_mode() {
+        let error = parse_args(&["cost".to_string(), "list".to_string()])
+            .expect_err("cost list should return guidance");
+        assert!(error.contains("slash command"));
+        assert!(error.contains("/cost"));
+        assert!(error.contains("extra argument"));
+    }
+
+    #[test]
+    fn slash_only_verbs_with_extra_args_return_guidance_instead_of_prompt_mode() {
+        for args in [
+            vec!["hooks".to_string(), "--help".to_string()],
+            vec!["plan".to_string(), "list".to_string()],
+            vec!["theme".to_string(), "dark".to_string()],
+            vec!["tokens".to_string(), "--json".to_string()],
+        ] {
+            let error =
+                parse_args(&args).expect_err("slash-only verb with args should return guidance");
+            assert!(
+                error.contains("slash command"),
+                "expected slash guidance for {args:?}, got: {error}"
+            );
+            assert!(
+                error.contains("extra argument"),
+                "expected extra-args note for {args:?}, got: {error}"
+            );
+        }
+    }
+
+    #[test]
     fn multi_word_prompt_still_uses_shorthand_prompt_mode() {
         let _guard = env_lock();
         std::env::remove_var("RUSTY_CLAUDE_PERMISSION_MODE");
@@ -16900,6 +16956,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -16971,6 +17028,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -16998,6 +17056,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -17133,6 +17192,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -17152,6 +17212,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -17181,6 +17242,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -19262,8 +19324,9 @@ UU conflicted.rs",
             .expect("plugin install should succeed");
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("plugin state should load");
         let pre_hooks = state.feature_config.hooks().pre_tool_use();
         assert_eq!(pre_hooks.len(), 1);
         assert!(
@@ -19307,8 +19370,9 @@ UU conflicted.rs",
 
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("runtime plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("runtime plugin state should load");
 
         let allowed = state
             .tool_registry
@@ -19414,8 +19478,9 @@ UU conflicted.rs",
 
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("runtime plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("runtime plugin state should load");
         let mut executor = CliToolExecutor::new(
             None,
             false,
@@ -19470,7 +19535,7 @@ UU conflicted.rs",
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
         let runtime_plugin_state =
-            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
                 .expect("plugin state should load");
         let mut runtime = build_runtime_with_plugin_state(
             Session::new(),
