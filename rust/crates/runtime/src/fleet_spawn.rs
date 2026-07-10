@@ -107,6 +107,21 @@ pub struct FleetSpawnResult {
     pub message: String,
 }
 
+fn escape_for_zsh_lc_prompt(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if ch == '\'' {
+            escaped.push_str("'\\''");
+        } else {
+            if matches!(ch, '\\' | '"' | '$' | '`') {
+                escaped.push('\\');
+            }
+            escaped.push(ch);
+        }
+    }
+    escaped
+}
+
 /// Spawn a fleet worker in an isolated worktree + tmux session.
 pub fn spawn_fleet_worker(
     claw_home: &Path,
@@ -158,7 +173,7 @@ pub fn spawn_fleet_worker(
         }
     }
 
-    let escaped_prompt = request.prompt.replace('\'', "'\\''");
+    let escaped_prompt = escape_for_zsh_lc_prompt(&request.prompt);
     let claw_cmd = format!("zsh -l -c 'claw --output-format json prompt \"{escaped_prompt}\"'");
     let tmux_cmd = format!(
         "tmux new-session -d -s {tmux_session} -c {} {claw_cmd}",

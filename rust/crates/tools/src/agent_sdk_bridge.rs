@@ -18,6 +18,8 @@ pub struct AgentSdkBridgeInput {
     pub name: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
 }
 
 /// Whether SDK delegation is explicitly disabled.
@@ -125,9 +127,11 @@ fn normalize_sdk_agent(subagent_type: Option<&str>, name: Option<&str>) -> Optio
 pub fn run_agent_sdk_bridge(input: &AgentSdkBridgeInput) -> Result<String, String> {
     let root = resolve_orchestrator_root()?;
     let agent = normalize_sdk_agent(input.subagent_type.as_deref(), input.name.as_deref());
-    let cwd = std::env::current_dir()
-        .ok()
-        .map(|path| path.display().to_string());
+    let cwd = input.cwd.clone().or_else(|| {
+        std::env::current_dir()
+            .ok()
+            .map(|path| path.display().to_string())
+    });
 
     let payload = serde_json::json!({
         "prompt": input.prompt,
@@ -179,7 +183,11 @@ mod tests {
     fn delegates_when_env_enabled() {
         assert!(should_delegate_to_agent_sdk(Some("sdk:vibe-orchestrator")));
         assert!(should_delegate_to_agent_sdk(Some("agent-sdk")));
-        assert!(!should_delegate_to_agent_sdk(Some("Explore")));
+        if sdk_default_enabled() {
+            assert!(should_delegate_to_agent_sdk(Some("Explore")));
+        } else {
+            assert!(!should_delegate_to_agent_sdk(Some("Explore")));
+        }
     }
 
     #[test]

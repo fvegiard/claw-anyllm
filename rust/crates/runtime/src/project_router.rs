@@ -199,7 +199,6 @@ fn find_existing_match(intent: &str, registry: &ProjectsRegistry) -> Option<Proj
                 || p.tags
                     .iter()
                     .any(|t| lower.contains(&t.to_ascii_lowercase()))
-                || lower.contains("continue")
                 || lower.contains("yesterday")
                 || lower.contains("last project")
         })
@@ -213,6 +212,63 @@ fn find_existing_match(intent: &str, registry: &ProjectsRegistry) -> Option<Proj
                 .filter(|_| lower.contains("continue") || lower.contains("yesterday"))
                 .cloned()
         })
+}
+
+fn is_git_repo(path: &Path) -> bool {
+    Command::new("git")
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .current_dir(path)
+        .output()
+        .map(|output| {
+            output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true"
+        })
+        .unwrap_or(false)
+}
+
+fn wants_new_project(intent: &str, request: &ProjectRouteRequest) -> bool {
+    if request
+        .project_name
+        .as_ref()
+        .is_some_and(|name| !name.trim().is_empty())
+    {
+        return true;
+    }
+    if request
+        .stack
+        .as_ref()
+        .is_some_and(|stack| !stack.trim().is_empty())
+    {
+        return true;
+    }
+    let lower = intent.to_ascii_lowercase();
+    [
+        "build",
+        "create",
+        "scaffold",
+        "new project",
+        "bootstrap",
+        "initialize",
+        "init project",
+    ]
+    .iter()
+    .any(|keyword| lower.contains(keyword))
+}
+
+fn current_workspace_route(cwd: &Path) -> ProjectRouteResult {
+    let name = cwd
+        .file_name()
+        .and_then(|part| part.to_str())
+        .map(slugify)
+        .filter(|slug| !slug.is_empty())
+        .unwrap_or_else(|| String::from("workspace"));
+    ProjectRouteResult {
+        action: ProjectRouteAction::Route,
+        project_id: name.clone(),
+        project_name: name,
+        worktree: cwd.display().to_string(),
+        repo: String::from("workspace"),
+        message: format!("Staying in current workspace {}", cwd.display()),
+    }
 }
 
 fn run_git(args: &[&str], cwd: &Path) -> Result<(), ProjectRouterError> {
@@ -361,6 +417,14 @@ pub fn route_project(
             repo: entry.origin,
             message: format!("Cloned {url}"),
         });
+    }
+
+    if !wants_new_project(&request.intent, request) {
+        if let Ok(cwd) = std::env::current_dir() {
+            if is_git_repo(&cwd) {
+                return Ok(current_workspace_route(&cwd));
+            }
+        }
     }
 
     let stack = infer_stack(&request.intent, request.stack.as_deref());

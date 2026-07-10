@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import { appendProgress, loadPrd, verifyBeforeComplete } from "./ralph.js";
-import { loadTodos, saveTodos, todosIncomplete } from "./todos.js";
+import { loadTodos, saveTodos, syncTodosFromToolUse, todosIncomplete } from "./todos.js";
 
 const MAX_REVISION_ATTEMPTS = 5;
 let revisionAttempts = 0;
@@ -26,6 +26,24 @@ const postToolFailure: HookCallback = async (input) => {
     decision: "continue",
     reason: "Delegate to revision-reviewer subagent",
   };
+};
+
+const postToolUse: HookCallback = async (input) => {
+  const hookInput = input as {
+    hook_event_name?: string;
+    tool_name?: string;
+    tool_input?: Record<string, unknown>;
+    cwd?: string;
+  };
+  if (
+    hookInput.hook_event_name === "PostToolUse"
+    && hookInput.tool_name === "TodoWrite"
+    && hookInput.tool_input
+  ) {
+    const cwd = projectRoot(hookInput.cwd ?? process.cwd());
+    syncTodosFromToolUse(cwd, hookInput.tool_input);
+  }
+  return {};
 };
 
 const stopHook: HookCallback = async (input) => {
@@ -58,6 +76,7 @@ const sessionStart: HookCallback = async (input) => {
 };
 
 export const revisionHooks = {
+  PostToolUse: [{ hooks: [postToolUse] }],
   PostToolUseFailure: [{ hooks: [postToolFailure] }],
   Stop: [{ hooks: [stopHook] }],
   SessionStart: [{ hooks: [sessionStart] }],

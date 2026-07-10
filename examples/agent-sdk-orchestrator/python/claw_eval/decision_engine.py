@@ -164,6 +164,8 @@ def evaluate_candidates(payload: dict[str, Any]) -> dict[str, Any]:
         for i, c in enumerate(raw_candidates)
     ]
     engine = DecisionEngine(context=context)
+    if not candidates:
+        raise ValueError("no candidate actions to evaluate")
     ranked = engine.rank(candidates)
     best = ranked[0]
     return {

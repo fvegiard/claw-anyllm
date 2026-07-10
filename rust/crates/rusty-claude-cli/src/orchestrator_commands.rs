@@ -223,25 +223,33 @@ async fn orchestrate_handler(
     headers: HeaderMap,
     Json(req): Json<OrchestrateRequest>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    if let Ok(expected) = std::env::var("CLAW_WEBHOOK_TOKEN") {
-        if !expected.is_empty() {
-            let provided = headers
-                .get("x-claw-webhook-token")
+    let expected = std::env::var("CLAW_WEBHOOK_TOKEN").map_err(|_| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            String::from("CLAW_WEBHOOK_TOKEN must be set"),
+        )
+    })?;
+    if expected.is_empty() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            String::from("CLAW_WEBHOOK_TOKEN must not be empty"),
+        ));
+    }
+    let provided = headers
+        .get("x-claw-webhook-token")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| {
+            headers
+                .get("authorization")
                 .and_then(|v| v.to_str().ok())
-                .or_else(|| {
-                    headers
-                        .get("authorization")
-                        .and_then(|v| v.to_str().ok())
-                        .map(|v| v.strip_prefix("Bearer ").unwrap_or(v))
-                })
-                .unwrap_or_default();
-            if provided != expected {
-                return Err((
-                    StatusCode::UNAUTHORIZED,
-                    String::from("invalid webhook token"),
-                ));
-            }
-        }
+                .map(|v| v.strip_prefix("Bearer ").unwrap_or(v))
+        })
+        .unwrap_or_default();
+    if provided != expected {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            String::from("invalid webhook token"),
+        ));
     }
 
     let route = route_project(
@@ -262,6 +270,7 @@ async fn orchestrate_handler(
         subagent_type: Some(String::from("vibe-orchestrator")),
         name: None,
         model: None,
+        cwd: Some(route.worktree.clone()),
     };
     let sdk_result = tools::agent_sdk_bridge::run_agent_sdk_bridge(&bridge)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
@@ -311,7 +320,7 @@ pub fn parse_webhook_args(args: &[String]) -> Result<(String, String), String> {
     if action != "serve" {
         return Err(String::from("usage: claw webhook serve [--bind HOST:PORT]"));
     }
-    let mut bind = String::from("0.0.0.0:8790");
+    let mut bind = String::from("127.0.0.1:8790");
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--bind" {
