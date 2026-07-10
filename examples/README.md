@@ -29,8 +29,8 @@ Python evaluator (`uv run` or `python3 -m claw_eval.cli`) scores moves on 3 axes
 
 `ecosystem-mcp-starter.json` is a batteries-included `.claw/settings.json` fragment that wires the highest-signal MCP servers from the official MCP registry and community leaderboards:
 
-- **filesystem** — workspace file ops (official MCP reference server)
-- **github** — issues, PRs, repo search (`GITHUB_PERSONAL_ACCESS_TOKEN`)
+- **filesystem** — workspace file ops (official MCP reference server; `.` = claw's current working directory)
+- **github** — issues, PRs, repo search (inherits `GITHUB_PERSONAL_ACCESS_TOKEN` from your shell; export it before `claw`)
 - **fetch** — web content for RAG-style retrieval
 - **playwright** — headless browser automation (beats raw Puppeteer MCP token tax for agents)
 - **context7** — live library/docs lookup (top community docs MCP)
@@ -39,10 +39,13 @@ Python evaluator (`uv run` or `python3 -m claw_eval.cli`) scores moves on 3 axes
 ```bash
 mkdir -p .claw
 cp ecosystem-mcp-starter.json .claw/settings.json
+export GITHUB_PERSONAL_ACCESS_TOKEN="ghp_..."  # required for github MCP
 # Set tokens as needed, then:
 claw doctor --output-format json
 claw mcp list --output-format json
 ```
+
+Claw expands `${VAR}` in MCP `command`/`args`/`url` from the process environment (not VS Code `${env:VAR}` or `${workspaceFolder}`). Use `.` for the workspace root or `${PWD}` when you need an absolute path.
 
 Claw uses flat `mcpServers`, not VS Code / Hermes nested `mcp.servers`. `claw doctor` warns if it detects the wrong shape.
 
