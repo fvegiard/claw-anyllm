@@ -266,8 +266,7 @@ mod tests {
 
     #[test]
     fn extract_multiple_blocks_errors() {
-        let response =
-            "<thinking>first</thinking> middle <thinking>second</thinking> trailing";
+        let response = "<thinking>first</thinking> middle <thinking>second</thinking> trailing";
         let err = extract_thinking(response).expect_err("two blocks must error");
         assert_eq!(err, ThinkingError::MultipleBlocks);
     }

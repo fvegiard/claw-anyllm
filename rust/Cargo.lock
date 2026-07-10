@@ -2243,6 +2243,7 @@ name = "rusty-claude-cli"
 version = "0.1.3"
 dependencies = [
  "api",
+ "axum 0.8.9",
  "commands",
  "crossterm",
  "log",

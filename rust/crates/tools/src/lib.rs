@@ -670,7 +670,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "Agent",
-            description: "Launch a specialized agent. Set CLAW_AGENT_SDK=1 or subagent_type sdk:* to use @anthropic-ai/claude-agent-sdk (nested subagents, Workflow, vision, Python 3D eval). Otherwise runs in-process Rust subagent.",
+            description: "Launch a specialized agent. Uses @anthropic-ai/claude-agent-sdk by default (set CLAW_AGENT_SDK=0 to use in-process Rust subagent).",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1358,6 +1358,50 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             }),
             required_permission: PermissionMode::DangerFullAccess,
         },
+        ToolSpec {
+            name: "ProjectRoute",
+            description: "Auto-route or create a project from user intent. Never ask the human to git init or pick a folder.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "intent": { "type": "string" },
+                    "repo_url": { "type": "string" },
+                    "project_name": { "type": "string" },
+                    "stack": { "type": "string" }
+                },
+                "required": ["intent"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::WorkspaceWrite,
+        },
+        ToolSpec {
+            name: "FleetSpawn",
+            description: "Spawn an isolated fleet worker (git worktree + tmux, max 20).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "prompt": { "type": "string" },
+                    "worker_id": { "type": "string" }
+                },
+                "required": ["prompt"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::DangerFullAccess,
+        },
+        ToolSpec {
+            name: "retrieve_context",
+            description: "Query indexed workspace docs via claw-rag-service (RAG_BASE_URL).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" },
+                    "top_k": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["query"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
     ]
 }
 
@@ -1522,6 +1566,12 @@ fn execute_tool_with_enforcer(
             // All knobs resolved from env inside `run_openhands`.
             openhands::run_openhands(&openhands_input, None, None, None, None, None)
         }
+        "ProjectRoute" => from_value::<orchestrator_tools::ProjectRouteToolInput>(input)
+            .and_then(orchestrator_tools::run_project_route),
+        "FleetSpawn" => from_value::<orchestrator_tools::FleetSpawnToolInput>(input)
+            .and_then(orchestrator_tools::run_fleet_spawn),
+        "retrieve_context" => from_value::<orchestrator_tools::RetrieveContextInput>(input)
+            .and_then(orchestrator_tools::run_retrieve_context),
         _ => Err(format!("unsupported tool: {name}")),
     }
 }
@@ -4128,8 +4178,8 @@ fn execute_agent_via_sdk_bridge(input: AgentInput) -> Result<AgentOutput, String
         model: input.model.clone(),
     };
     let raw = run_agent_sdk_bridge(&bridge_input)?;
-    let parsed: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|error| format!("agent sdk returned invalid json: {error}"))?;
+    let parsed: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|error| format!("agent sdk returned invalid json: {error}"))?;
 
     let agent_id = make_agent_id();
     let output_dir = agent_store_dir()?;
@@ -4145,9 +4195,7 @@ fn execute_agent_via_sdk_bridge(input: AgentInput) -> Result<AgentOutput, String
         .get("result")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("");
-    let error_text = parsed
-        .get("error")
-        .and_then(serde_json::Value::as_str);
+    let error_text = parsed.get("error").and_then(serde_json::Value::as_str);
     let subagent = parsed
         .get("subagent")
         .and_then(serde_json::Value::as_str)
@@ -4162,7 +4210,11 @@ fn execute_agent_via_sdk_bridge(input: AgentInput) -> Result<AgentOutput, String
     )
     .map_err(|error| error.to_string())?;
 
-    let terminal_status = if status == "error" { "failed" } else { "completed" };
+    let terminal_status = if status == "error" {
+        "failed"
+    } else {
+        "completed"
+    };
     let manifest = AgentOutput {
         agent_id,
         name: input
@@ -6936,6 +6988,7 @@ fn parse_skill_description(contents: &str) -> Option<String> {
 pub mod agent_sdk_bridge;
 pub mod lane_completion;
 pub mod openhands;
+pub mod orchestrator_tools;
 pub mod pdf_extract;
 
 #[cfg(test)]
