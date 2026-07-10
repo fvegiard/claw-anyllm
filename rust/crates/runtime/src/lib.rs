@@ -77,8 +77,9 @@ pub use config::{
     RuntimeProviderConfig, ScopedMcpServerConfig, CLAW_SETTINGS_SCHEMA_NAME,
 };
 pub use config_validate::{
-    check_unsupported_format, format_diagnostics, validate_config_file, ConfigDiagnostic,
-    DiagnosticKind, ValidationResult,
+    check_unsupported_format, find_mcp_config_form_drift, format_diagnostics,
+    json_value_has_mcp_config_form_drift, validate_config_file, ConfigDiagnostic, DiagnosticKind,
+    ValidationResult, MCP_CONFIG_FORM_DRIFT_HINT,
 };
 pub use conversation::{
     auto_compaction_threshold_from_env, ApiClient, ApiRequest, AssistantEvent, AutoCompactionEvent,

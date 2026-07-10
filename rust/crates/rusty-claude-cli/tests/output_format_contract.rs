@@ -1499,6 +1499,7 @@ fn doctor_and_resume_status_emit_json_when_requested() {
             "base urls",
             "config",
             "mcp validation",
+            "mcp config form",
             "hook validation",
             "install source",
             "workspace",

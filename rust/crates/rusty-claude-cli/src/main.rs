@@ -62,6 +62,7 @@ use runtime::{
     McpServer, McpServerManager, McpServerSpec, McpTool, MessageRole, ModelPricing, PermissionMode,
     PermissionPolicy, ProjectContext, PromptCacheEvent, ResolvedPermissionMode, RuntimeError,
     RuntimeInvalidHookConfig, Session, TokenUsage, ToolError, ToolExecutor, UsageTracker,
+    MCP_CONFIG_FORM_DRIFT_HINT,
 };
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -3737,6 +3738,7 @@ fn render_doctor_report(
             check_base_url_health(),
             check_config_health(&config_loader, config.as_ref()),
             check_mcp_validation_health(&mcp_validation),
+            check_mcp_config_form_drift_health(&config_loader),
             check_hook_validation_health(&hook_validation),
             check_install_source_health(),
             check_workspace_health(&context),
@@ -4179,6 +4181,59 @@ fn check_mcp_validation_health(summary: &McpValidationSummary) -> DiagnosticChec
             "invalid_servers".to_string(),
             Value::Array(invalid_mcp_servers_json(&summary.invalid_servers)),
         ),
+    ]))
+}
+
+fn check_mcp_config_form_drift_health(config_loader: &ConfigLoader) -> DiagnosticCheck {
+    let mut drift_files = Vec::new();
+    for entry in config_loader.discover() {
+        if !entry.path.exists() {
+            continue;
+        }
+        let Ok(raw) = std::fs::read_to_string(&entry.path) else {
+            continue;
+        };
+        let Ok(parsed) = serde_json::from_str::<Value>(&raw) else {
+            continue;
+        };
+        if parsed
+            .as_object()
+            .is_some_and(|object| object.contains_key("mcp"))
+        {
+            drift_files.push(entry.path.display().to_string());
+        }
+    }
+
+    DiagnosticCheck::new(
+        "MCP config form",
+        if drift_files.is_empty() {
+            DiagnosticLevel::Ok
+        } else {
+            DiagnosticLevel::Warn
+        },
+        if drift_files.is_empty() {
+            "no VS Code / Hermes-style nested mcp blocks detected".to_string()
+        } else {
+            format!(
+                "{} config file(s) use nested \"mcp\" instead of flat \"mcpServers\"",
+                drift_files.len()
+            )
+        },
+    )
+    .with_hint(if drift_files.is_empty() {
+        ""
+    } else {
+        MCP_CONFIG_FORM_DRIFT_HINT
+    })
+    .with_details(
+        drift_files
+            .iter()
+            .map(|path| format!("Drift file       {path}"))
+            .collect(),
+    )
+    .with_data(Map::from_iter([
+        ("drift_file_count".to_string(), json!(drift_files.len())),
+        ("drift_files".to_string(), json!(drift_files)),
     ]))
 }
 
@@ -10473,7 +10528,7 @@ fn render_doctor_help_json() -> serde_json::Value {
         "requires_session_resume": false,
         "mutates_workspace": false,
         "output_fields": ["kind", "action", "status", "message", "report", "has_failures", "summary", "checks", "allowed_tools"],
-        "check_names": ["auth", "config", "mcp validation", "hook validation", "install source", "workspace", "memory", "boot preflight", "sandbox", "permissions", "system"],
+        "check_names": ["auth", "config", "mcp validation", "mcp config form", "hook validation", "install source", "workspace", "memory", "boot preflight", "sandbox", "permissions", "system"],
         "status_values": ["ok", "warn", "fail"],
         "options": [
             {
