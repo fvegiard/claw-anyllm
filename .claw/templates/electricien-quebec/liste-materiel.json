@@ -1,0 +1,16 @@
+{
+  "$comment": "Liste de matériel à commander/apporter pour un chantier.",
+  "nom_chantier": "",
+  "date": "",
+  "articles": [
+    {
+      "description": "",
+      "quantite": 0,
+      "unite": "",
+      "fournisseur": "",
+      "commande": false,
+      "recu": false,
+      "notes": ""
+    }
+  ]
+}

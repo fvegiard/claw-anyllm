@@ -1,0 +1,14 @@
+{
+  "$comment": "Échéancier des étapes du chantier.",
+  "nom_chantier": "",
+  "etapes": [
+    {
+      "nom": "",
+      "date_prevue": "",
+      "date_reelle": "",
+      "statut": "a_faire | en_cours | termine | bloque",
+      "depend_de": [],
+      "notes": ""
+    }
+  ]
+}

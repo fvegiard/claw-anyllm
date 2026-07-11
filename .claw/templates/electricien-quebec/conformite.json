@@ -1,0 +1,42 @@
+{
+  "$comment": "Checklist de conformité — un outil d'aide-mémoire, PAS une certification. Toute case cochée doit refléter une vérification réelle par un professionnel licencié, jamais une supposition de l'agent.",
+  "nom_chantier": "",
+  "rappel": "Ce document ne remplace pas l'inspection et l'approbation d'un maître électricien licencié RBQ et, le cas échéant, d'Hydro-Québec ou de la municipalité. Ne jamais cocher un item sans vérification réelle documentée.",
+  "items": [
+    {
+      "item": "Permis municipal/RBQ obtenu si requis",
+      "reference": "RBQ / municipalité locale",
+      "verifie": false,
+      "verifie_par": "",
+      "date_verification": ""
+    },
+    {
+      "item": "Calibre de fil et protection conformes au Code de construction du Québec, Chapitre V (CSA C22.1)",
+      "reference": "Code de construction du Québec, Chapitre V — Électricité",
+      "verifie": false,
+      "verifie_par": "",
+      "date_verification": ""
+    },
+    {
+      "item": "Mise à la terre et liaison équipotentielle conformes",
+      "reference": "CSA C22.1",
+      "verifie": false,
+      "verifie_par": "",
+      "date_verification": ""
+    },
+    {
+      "item": "Raccordement au réseau approuvé par Hydro-Québec (si applicable)",
+      "reference": "Hydro-Québec",
+      "verifie": false,
+      "verifie_par": "",
+      "date_verification": ""
+    },
+    {
+      "item": "Inspection finale par électricien licencié avant mise sous tension",
+      "reference": "RBQ",
+      "verifie": false,
+      "verifie_par": "",
+      "date_verification": ""
+    }
+  ]
+}

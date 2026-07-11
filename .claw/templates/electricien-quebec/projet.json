@@ -1,0 +1,23 @@
+{
+  "$comment": "Gabarit de fiche de chantier. Copier dans .claw/projects/<nom>/projet.json et remplir.",
+  "nom_chantier": "",
+  "client": {
+    "nom": "",
+    "telephone": "",
+    "courriel": "",
+    "adresse_facturation": ""
+  },
+  "adresse_chantier": "",
+  "type_travaux": "residentiel | commercial | industriel",
+  "description": "",
+  "date_creation": "",
+  "statut": "nouveau | en_attente_soumission | approuve | en_cours | en_attente_inspection | termine | annule",
+  "entrepreneur": {
+    "nom": "",
+    "numero_licence_rbq": ""
+  },
+  "notes_securite": [
+    "Travail électrique à valider par un maître électricien licencié RBQ avant mise sous tension.",
+    "Se conformer au Code de construction du Québec, Chapitre V — Électricité (CSA C22.1)."
+  ]
+}

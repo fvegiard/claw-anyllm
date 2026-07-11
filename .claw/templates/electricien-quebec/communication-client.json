@@ -1,0 +1,13 @@
+{
+  "$comment": "Journal des communications avec le client. Rester factuel; éviter de stocker des renseignements personnels non nécessaires (Loi 25).",
+  "nom_chantier": "",
+  "entrees": [
+    {
+      "date": "",
+      "type": "appel | courriel | texto | visite",
+      "resume": "",
+      "suivi_requis": false,
+      "suivi_notes": ""
+    }
+  ]
+}
