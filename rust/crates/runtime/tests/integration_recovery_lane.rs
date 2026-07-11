@@ -11,8 +11,8 @@
 //!   4. Call `WorkerRegistry::recovery_ledger` and assert the ledger entry
 //!   5. Call `WorkerRegistry::lane_event_for_failure` and assert the event
 
-use runtime::recovery_recipes::{RecoveryEvent, RecoveryResult};
-use runtime::lane_events::{EventProvenance, LaneEventName, LaneEventStatus, LaneFailureClass};
+use runtime::{RecoveryEvent, RecoveryResult};
+use runtime::{EventProvenance, LaneEventName, LaneEventStatus, LaneFailureClass};
 use runtime::worker_boot::{WorkerFailureKind, WorkerRegistry, WorkerStatus};
 
 #[test]
@@ -21,7 +21,7 @@ fn attempt_recovery_for_provider_failure_yields_recovered() {
     let registry = WorkerRegistry::new();
     let worker = registry
         .create("/tmp/b1-recovery-test", &[], true)
-        .expect("create should succeed");
+        ;
 
     // Drive to ready
     registry
@@ -72,7 +72,7 @@ fn attempt_recovery_for_trust_gate_failure_yields_recovered() {
     let registry = WorkerRegistry::new();
     let worker = registry
         .create("/tmp/b1-trust-test", &[], false)
-        .expect("create should succeed");
+        ;
     let observed = registry
         .observe(&worker.worker_id, "Do you trust the files in this folder? (y/n)")
         .expect("observe should succeed");
@@ -108,7 +108,7 @@ fn attempt_recovery_for_returns_err_when_worker_has_no_failure() {
     let registry = WorkerRegistry::new();
     let worker = registry
         .create("/tmp/b1-no-failure", &[], false)
-        .expect("create should succeed");
+        ;
 
     // when
     let result = registry.attempt_recovery_for(&worker.worker_id);
@@ -140,7 +140,7 @@ fn lane_event_for_failure_returns_typed_lane_failed_event() {
     let registry = WorkerRegistry::new();
     let worker = registry
         .create("/tmp/b1-lane-event", &[], false)
-        .expect("create should succeed");
+        ;
     let observed = registry
         .observe(&worker.worker_id, "Do you trust the files in this folder? (y/n)")
         .expect("observe should succeed");
@@ -160,7 +160,7 @@ fn lane_event_for_failure_returns_typed_lane_failed_event() {
     assert_eq!(event.failure_class, Some(LaneFailureClass::TrustGate));
     assert!(event.detail.is_some(), "detail should be populated");
     assert!(
-        event.detail.expect("detail").contains("trust"),
+        event.detail.as_ref().expect("detail").contains("trust"),
         "detail should mention trust, got: {:?}", event.detail
     );
 }
@@ -171,7 +171,7 @@ fn lane_event_for_failure_maps_provider_failure_to_infra_class() {
     let registry = WorkerRegistry::new();
     let worker = registry
         .create("/tmp/b1-lane-event-provider", &[], true)
-        .expect("create should succeed");
+        ;
     registry
         .observe(&worker.worker_id, "Ready for your input\n>")
         .expect("ready observe should succeed");
@@ -201,7 +201,7 @@ fn recovery_events_logged_in_context_after_attempt() {
     let registry = WorkerRegistry::new();
     let worker = registry
         .create("/tmp/b1-recovery-events", &[], false)
-        .expect("create should succeed");
+        ;
     registry
         .observe(&worker.worker_id, "Do you trust the files in this folder? (y/n)")
         .expect("observe should succeed");
