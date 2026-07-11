@@ -97,7 +97,9 @@ fn cron_registry_tick_invokes_callback_for_each_due_entry() {
     registry.create("0 * * * *", "prompt A", None);
     registry.create("*/5 * * * *", "prompt B", None);
     let disabled = registry.create("0 0 * * *", "prompt C", None);
-    registry.disable(&disabled.cron_id).expect("disable should succeed");
+    registry
+        .disable(&disabled.cron_id)
+        .expect("disable should succeed");
 
     let fired = Arc::new(Mutex::new(Vec::<String>::new()));
     let fired_clone = Arc::clone(&fired);
@@ -109,10 +111,16 @@ fn cron_registry_tick_invokes_callback_for_each_due_entry() {
     let count = registry.tick(on_due).expect("tick should succeed");
 
     // then
-    assert_eq!(count, 2, "should fire the 2 enabled entries, not the disabled one");
+    assert_eq!(
+        count, 2,
+        "should fire the 2 enabled entries, not the disabled one"
+    );
     let mut fired_prompts = fired.lock().expect("lock").clone();
     fired_prompts.sort();
-    assert_eq!(fired_prompts, vec!["prompt A".to_string(), "prompt B".to_string()]);
+    assert_eq!(
+        fired_prompts,
+        vec!["prompt A".to_string(), "prompt B".to_string()]
+    );
 }
 
 #[test]
@@ -137,7 +145,9 @@ fn cron_registry_tick_on_empty_registry_is_noop() {
     let registry = Arc::new(CronRegistry::new());
 
     // when
-    let count = registry.tick(|_| panic!("callback should not be called")).expect("tick should succeed");
+    let count = registry
+        .tick(|_| panic!("callback should not be called"))
+        .expect("tick should succeed");
 
     // then
     assert_eq!(count, 0);

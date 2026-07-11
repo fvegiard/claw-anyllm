@@ -269,14 +269,12 @@ impl CronRegistry {
     where
         F: FnMut(&CronEntry) + Send + 'static,
     {
-        std::thread::spawn(move || {
-            loop {
-                if stop_rx.try_recv().is_ok() {
-                    break;
-                }
-                let _ = self.tick(&mut on_due);
-                std::thread::sleep(std::time::Duration::from_secs(interval_secs));
+        std::thread::spawn(move || loop {
+            if stop_rx.try_recv().is_ok() {
+                break;
             }
+            let _ = self.tick(&mut on_due);
+            std::thread::sleep(std::time::Duration::from_secs(interval_secs));
         })
     }
 
