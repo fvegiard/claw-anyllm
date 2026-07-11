@@ -20,9 +20,49 @@ pub struct AgentSdkBridgeInput {
     pub model: Option<String>,
 }
 
+/// Whether SDK delegation is explicitly disabled.
+#[must_use]
+pub fn sdk_explicitly_disabled() -> bool {
+    std::env::var("CLAW_AGENT_SDK")
+        .ok()
+        .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "0" | "false" | "no"))
+}
+
+/// Whether the orchestrator directory and Node toolchain are available.
+#[must_use]
+pub fn agent_sdk_available() -> bool {
+    resolve_orchestrator_root().is_ok()
+        && std::process::Command::new("npx")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+}
+
+/// Whether SDK is the default Agent path (opt-out via `CLAW_AGENT_SDK=0`).
+#[must_use]
+pub fn sdk_default_enabled() -> bool {
+    !sdk_explicitly_disabled() && agent_sdk_available()
+}
+
 /// Whether this Agent invocation should use the TypeScript SDK orchestrator.
 #[must_use]
 pub fn should_delegate_to_agent_sdk(subagent_type: Option<&str>) -> bool {
+    if sdk_explicitly_disabled() {
+        return subagent_type.is_some_and(|subagent| {
+            let lower = subagent.to_ascii_lowercase();
+            lower.starts_with("sdk:")
+                || lower == "agent-sdk"
+                || lower == "vibe-orchestrator"
+                || lower == "vision-looker"
+                || lower == "github-researcher"
+        });
+    }
+
+    if sdk_default_enabled() {
+        return true;
+    }
+
     if std::env::var("CLAW_AGENT_SDK")
         .ok()
         .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
@@ -137,9 +177,15 @@ mod tests {
 
     #[test]
     fn delegates_when_env_enabled() {
-        // given / when / then — only checks predicate shape; env is process-global.
         assert!(should_delegate_to_agent_sdk(Some("sdk:vibe-orchestrator")));
         assert!(should_delegate_to_agent_sdk(Some("agent-sdk")));
         assert!(!should_delegate_to_agent_sdk(Some("Explore")));
+    }
+
+    #[test]
+    fn sdk_default_enabled_when_orchestrator_present() {
+        if agent_sdk_available() {
+            assert!(sdk_default_enabled() || sdk_explicitly_disabled());
+        }
     }
 }

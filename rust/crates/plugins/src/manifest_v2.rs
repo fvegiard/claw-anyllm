@@ -88,7 +88,10 @@ impl fmt::Display for ManifestError {
             Self::MissingField(name) => write!(f, "missing required field: {name}"),
             Self::InvalidJson(e) => write!(f, "invalid JSON: {e}"),
             Self::UnsupportedVersion(v) => {
-                write!(f, "unsupported schema version: {v} (this build understands v{SCHEMA_VERSION})")
+                write!(
+                    f,
+                    "unsupported schema version: {v} (this build understands v{SCHEMA_VERSION})"
+                )
             }
         }
     }
@@ -162,7 +165,10 @@ mod tests {
         assert_eq!(m.providers[0].auth_env.as_deref(), Some("MAVIS_TOKEN"));
         assert_eq!(m.tools.len(), 0);
         assert_eq!(m.hooks.len(), 0);
-        assert_eq!(m.description.as_deref(), Some("Bridge that registers Mavis (or compatible) as an LLM backend"));
+        assert_eq!(
+            m.description.as_deref(),
+            Some("Bridge that registers Mavis (or compatible) as an LLM backend")
+        );
     }
 
     #[test]

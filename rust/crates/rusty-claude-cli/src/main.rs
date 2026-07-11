@@ -16,6 +16,7 @@
 )]
 mod init;
 mod input;
+mod orchestrator_commands;
 mod render;
 mod setup_wizard;
 
@@ -1084,6 +1085,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 None
             };
             let effective_prompt = merge_prompt_with_stdin(&prompt, stdin_context.as_deref());
+            if let Ok(route) = orchestrator_commands::ensure_project_for_intent(&effective_prompt) {
+                if std::path::Path::new(&route.worktree).is_dir() {
+                    let _ = std::env::set_current_dir(&route.worktree);
+                }
+                if matches!(output_format, CliOutputFormat::Text) {
+                    eprintln!("project-router: {} → {}", route.message, route.worktree);
+                }
+            }
             let resolved_model = resolve_repl_model(model)?;
             let mut cli = LiveCli::new(resolved_model, true, allowed_tools, permission_mode)?;
             cli.set_reasoning_effort(reasoning_effort);
@@ -1102,6 +1111,55 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         CliAction::State { output_format } => run_worker_state(output_format)?,
         CliAction::Init { output_format } => run_init(output_format)?,
         CliAction::Setup { output_format: _ } => run_setup()?,
+        CliAction::Vm {
+            action,
+            args,
+            output_format,
+        } => {
+            let fmt = orchestrator_output_format(output_format);
+            match action.as_str() {
+                "up" => orchestrator_commands::run_vm_up(fmt)?,
+                "status" => orchestrator_commands::run_vm_status(fmt)?,
+                "exec" => {
+                    let cmd = args.join(" ");
+                    if cmd.is_empty() {
+                        return Err("usage: claw vm exec <command>".into());
+                    }
+                    orchestrator_commands::run_vm_exec(&cmd, fmt)?;
+                }
+                other => return Err(format!("unknown vm action: {other}").into()),
+            }
+        }
+        CliAction::Fleet {
+            action,
+            args,
+            output_format,
+        } => {
+            let fmt = orchestrator_output_format(output_format);
+            match action.as_str() {
+                "list" => orchestrator_commands::run_fleet_list(fmt)?,
+                "spawn" => {
+                    let prompt = args.join(" ");
+                    if prompt.is_empty() {
+                        return Err("usage: claw fleet spawn <prompt>".into());
+                    }
+                    orchestrator_commands::run_fleet_spawn(&prompt, fmt)?;
+                }
+                other => return Err(format!("unknown fleet action: {other}").into()),
+            }
+        }
+        CliAction::Webhook {
+            bind,
+            output_format: _,
+        } => {
+            let runtime = tokio::runtime::Runtime::new()?;
+            if let Err(error) = runtime.block_on(orchestrator_commands::run_webhook_serve(&bind)) {
+                return Err(error.to_string().into());
+            }
+        }
+        CliAction::CompletionGate { output_format } => {
+            orchestrator_commands::run_completion_gate(orchestrator_output_format(output_format))?;
+        }
         // #146: dispatch pure-local introspection. Text mode uses existing
         // render_config_report/render_diff_report; JSON mode uses the
         // corresponding _json helpers already exposed for resume sessions.
@@ -1249,6 +1307,23 @@ enum CliAction {
         output_format: CliOutputFormat,
     },
     Setup {
+        output_format: CliOutputFormat,
+    },
+    Vm {
+        action: String,
+        args: Vec<String>,
+        output_format: CliOutputFormat,
+    },
+    Fleet {
+        action: String,
+        args: Vec<String>,
+        output_format: CliOutputFormat,
+    },
+    Webhook {
+        bind: String,
+        output_format: CliOutputFormat,
+    },
+    CompletionGate {
         output_format: CliOutputFormat,
     },
     // #146: `claw config` and `claw diff` are pure-local read-only
@@ -2036,6 +2111,30 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
             }
             Ok(CliAction::Diff { output_format })
         }
+        "vm" => {
+            let (action, tail) = orchestrator_commands::parse_vm_args(&rest[1..])?;
+            Ok(CliAction::Vm {
+                action,
+                args: tail,
+                output_format,
+            })
+        }
+        "fleet" => {
+            let (action, tail) = orchestrator_commands::parse_fleet_args(&rest[1..])?;
+            Ok(CliAction::Fleet {
+                action,
+                args: tail,
+                output_format,
+            })
+        }
+        "webhook" => {
+            let (_action, bind) = orchestrator_commands::parse_webhook_args(&rest[1..])?;
+            Ok(CliAction::Webhook {
+                bind,
+                output_format,
+            })
+        }
+        "completion-gate" => Ok(CliAction::CompletionGate { output_format }),
         // `claw permissions <mode>` falls through to the LLM when called
         // with a subcommand argument because parse_single_word_command_alias
         // only intercepts the bare single-word form. Catch all multi-word
@@ -2857,6 +2956,10 @@ fn is_known_top_level_subcommand(value: &str) -> bool {
             | "models"
             | "settings"
             | "diff"
+            | "vm"
+            | "fleet"
+            | "webhook"
+            | "completion-gate"
     )
 }
 
@@ -3747,8 +3850,23 @@ fn render_doctor_report(
             check_sandbox_health(&context.sandbox_status),
             check_permission_health(permission_mode),
             check_system_health(&cwd, config.as_ref().ok()),
+            check_agent_sdk_health(),
+            check_python_eval_health(),
+            check_fleet_deps_health(),
+            check_linux_vm_health(&cwd),
+            check_project_router_health(&cwd),
+            check_todo_discipline_health(&cwd),
         ],
     })
+}
+
+fn orchestrator_output_format(
+    output_format: CliOutputFormat,
+) -> orchestrator_commands::OrchestratorOutputFormat {
+    match output_format {
+        CliOutputFormat::Json => orchestrator_commands::OrchestratorOutputFormat::Json,
+        CliOutputFormat::Text => orchestrator_commands::OrchestratorOutputFormat::Text,
+    }
 }
 
 fn run_doctor(
@@ -4770,6 +4888,64 @@ fn check_system_health(cwd: &Path, config: Option<&runtime::RuntimeConfig>) -> D
         ("claw_log".to_string(), json!(env::var("CLAW_LOG").ok())),
         ("rust_log".to_string(), json!(env::var("RUST_LOG").ok())),
     ]))
+}
+
+fn probe_to_diagnostic(
+    name: &'static str,
+    probe: runtime::orchestrator_health::HealthProbe,
+) -> DiagnosticCheck {
+    DiagnosticCheck::new(
+        name,
+        if probe.ok {
+            DiagnosticLevel::Ok
+        } else {
+            DiagnosticLevel::Warn
+        },
+        probe.message.clone(),
+    )
+    .with_details(probe.details)
+}
+
+fn check_agent_sdk_health() -> DiagnosticCheck {
+    probe_to_diagnostic("Agent SDK", runtime::orchestrator_health::probe_agent_sdk())
+}
+
+fn check_python_eval_health() -> DiagnosticCheck {
+    probe_to_diagnostic(
+        "Python eval",
+        runtime::orchestrator_health::probe_python_eval(),
+    )
+}
+
+fn check_fleet_deps_health() -> DiagnosticCheck {
+    probe_to_diagnostic(
+        "Fleet deps",
+        runtime::orchestrator_health::probe_fleet_deps(),
+    )
+}
+
+fn check_linux_vm_health(cwd: &Path) -> DiagnosticCheck {
+    let claw_home = cwd.join(".claw");
+    probe_to_diagnostic(
+        "Linux VM",
+        runtime::orchestrator_health::probe_linux_vm(&claw_home),
+    )
+}
+
+fn check_project_router_health(cwd: &Path) -> DiagnosticCheck {
+    let claw_home = cwd.join(".claw");
+    probe_to_diagnostic(
+        "Project router",
+        runtime::orchestrator_health::probe_project_router(&claw_home),
+    )
+}
+
+fn check_todo_discipline_health(cwd: &Path) -> DiagnosticCheck {
+    let claw_home = cwd.join(".claw");
+    probe_to_diagnostic(
+        "Todo discipline",
+        runtime::orchestrator_health::probe_todo_discipline(&claw_home),
+    )
 }
 
 fn resume_command_can_absorb_token(current_command: &str, token: &str) -> bool {
@@ -10528,7 +10704,7 @@ fn render_doctor_help_json() -> serde_json::Value {
         "requires_session_resume": false,
         "mutates_workspace": false,
         "output_fields": ["kind", "action", "status", "message", "report", "has_failures", "summary", "checks", "allowed_tools"],
-        "check_names": ["auth", "config", "mcp validation", "mcp config form", "hook validation", "install source", "workspace", "memory", "boot preflight", "sandbox", "permissions", "system"],
+        "check_names": ["auth", "config", "mcp validation", "mcp config form", "hook validation", "install source", "workspace", "memory", "boot preflight", "sandbox", "permissions", "system", "agent sdk", "python eval", "fleet deps", "linux vm", "project router", "todo discipline"],
         "status_values": ["ok", "warn", "fail"],
         "options": [
             {
@@ -14748,6 +14924,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -14882,6 +15059,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -14973,6 +15151,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -14995,6 +15174,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15011,6 +15191,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15027,6 +15208,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
 
@@ -15065,6 +15247,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -15080,6 +15263,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15123,6 +15307,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15211,6 +15396,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15232,6 +15418,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15262,6 +15449,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15289,6 +15477,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -15465,6 +15654,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -16900,6 +17090,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -16971,6 +17162,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -16998,6 +17190,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
         assert_eq!(
@@ -17133,6 +17326,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -17152,6 +17346,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -17181,6 +17376,7 @@ mod tests {
                 base_commit: None,
                 reasoning_effort: None,
                 allow_broad_cwd: false,
+                think_mode: false,
             }
         );
     }
@@ -19262,8 +19458,9 @@ UU conflicted.rs",
             .expect("plugin install should succeed");
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("plugin state should load");
         let pre_hooks = state.feature_config.hooks().pre_tool_use();
         assert_eq!(pre_hooks.len(), 1);
         assert!(
@@ -19307,8 +19504,9 @@ UU conflicted.rs",
 
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("runtime plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("runtime plugin state should load");
 
         let allowed = state
             .tool_registry
@@ -19414,8 +19612,9 @@ UU conflicted.rs",
 
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
-        let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
-            .expect("runtime plugin state should load");
+        let state =
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
+                .expect("runtime plugin state should load");
         let mut executor = CliToolExecutor::new(
             None,
             false,
@@ -19470,7 +19669,7 @@ UU conflicted.rs",
         let loader = ConfigLoader::new(&workspace, &config_home);
         let runtime_config = loader.load().expect("runtime config should load");
         let runtime_plugin_state =
-            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
+            build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config, false)
                 .expect("plugin state should load");
         let mut runtime = build_runtime_with_plugin_state(
             Session::new(),

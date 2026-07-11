@@ -237,39 +237,37 @@ where
     let addr = listener.local_addr().expect("local_addr");
     let (tx, rx) = mpsc::channel();
     let _ = listener.set_nonblocking(true);
-    thread::spawn(move || {
-        loop {
-            let (mut stream, _) = match listener.accept() {
-                Ok(s) => s,
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(10));
-                    if tx.send(()).is_err() {
-                        break;
-                    }
-                    continue;
+    thread::spawn(move || loop {
+        let (mut stream, _) = match listener.accept() {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(10));
+                if tx.send(()).is_err() {
+                    break;
                 }
-                Err(_) => break,
-            };
-            let mut buf = [0u8; 8192];
-            let n = match stream.read(&mut buf) {
-                Ok(n) => n,
-                Err(_) => continue,
-            };
-            let request = String::from_utf8_lossy(&buf[..n]).into_owned();
-            let (headers, body) = parse_request(&request);
-            let (status, resp_body) = handler(&headers, &body);
-            let status_text = match status {
-                200 => "OK",
-                500 => "Internal Server Error",
-                _ => "Status",
-            };
-            let response = format!(
+                continue;
+            }
+            Err(_) => break,
+        };
+        let mut buf = [0u8; 8192];
+        let n = match stream.read(&mut buf) {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+        let (headers, body) = parse_request(&request);
+        let (status, resp_body) = handler(&headers, &body);
+        let status_text = match status {
+            200 => "OK",
+            500 => "Internal Server Error",
+            _ => "Status",
+        };
+        let response = format!(
                 "HTTP/1.1 {status} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{resp_body}",
                 resp_body.len()
             );
-            let _ = stream.write_all(response.as_bytes());
-            let _ = stream.flush();
-        }
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.flush();
     });
     (format!("http://{}", addr), rx)
 }
@@ -331,9 +329,7 @@ mod tests {
 
     #[test]
     fn http_500_yields_err_with_status() {
-        let (endpoint, _stop) = start_mock_server(|_, _| {
-            (500, "{\"error\":\"boom\"}".to_string())
-        });
+        let (endpoint, _stop) = start_mock_server(|_, _| (500, "{\"error\":\"boom\"}".to_string()));
         thread::sleep(Duration::from_millis(50));
         let input = OpenHandsInput {
             code: "ls".into(),
@@ -355,8 +351,14 @@ mod tests {
                 .find(|l| l.to_ascii_lowercase().starts_with("authorization:"))
                 .unwrap_or("")
                 .to_string();
-            assert!(auth.contains("Bearer test-key-123"), "auth header was: {auth}");
-            (200, "{\"stdout\":\"ok\",\"stderr\":\"\",\"exit_code\":0}".to_string())
+            assert!(
+                auth.contains("Bearer test-key-123"),
+                "auth header was: {auth}"
+            );
+            (
+                200,
+                "{\"stdout\":\"ok\",\"stderr\":\"\",\"exit_code\":0}".to_string(),
+            )
         });
         thread::sleep(Duration::from_millis(50));
         let input = OpenHandsInput {
@@ -364,8 +366,15 @@ mod tests {
             language: OpenHandsLanguage::Bash,
             response_path: None,
         };
-        let _ = run_openhands(&input, Some(&endpoint), None, Some("test-key-123"), None, None)
-            .expect("auth should pass");
+        let _ = run_openhands(
+            &input,
+            Some(&endpoint),
+            None,
+            Some("test-key-123"),
+            None,
+            None,
+        )
+        .expect("auth should pass");
     }
 
     #[test]
@@ -387,7 +396,10 @@ mod tests {
                 .map(str::trim)
                 .unwrap_or_default();
             assert_eq!(value, "sess-abc-123", "auth header was: {auth}");
-            (200, "{\"stdout\":\"ok\",\"stderr\":\"\",\"exit_code\":0}".to_string())
+            (
+                200,
+                "{\"stdout\":\"ok\",\"stderr\":\"\",\"exit_code\":0}".to_string(),
+            )
         });
         thread::sleep(Duration::from_millis(50));
         let input = OpenHandsInput {
@@ -413,7 +425,10 @@ mod tests {
             // We can't easily inspect request-line with our tiny mock parser,
             // but the call returning 200 is enough to confirm the path is well-formed
             // (otherwise we'd see a connection error).
-            (200, "{\"stdout\":\"ok\",\"stderr\":\"\",\"exit_code\":0}".to_string())
+            (
+                200,
+                "{\"stdout\":\"ok\",\"stderr\":\"\",\"exit_code\":0}".to_string(),
+            )
         });
         thread::sleep(Duration::from_millis(50));
         let input = OpenHandsInput {
@@ -466,11 +481,11 @@ mod tests {
         // is unset (which we cannot guarantee). We only assert the "constant"
         // defaults that don't read env.
         let cfg = OpenHandsConfig::resolve(
-            Some("http://h"),    // endpoint explicit
-            None,                // path from env or default
-            None,                // api_key from env or default
+            Some("http://h"),      // endpoint explicit
+            None,                  // path from env or default
+            None,                  // api_key from env or default
             Some("Authorization"), // explicit
-            None,                // prefix from env or default
+            None,                  // prefix from env or default
         );
         assert_eq!(cfg.endpoint, "http://h");
         // path/api_key/auth_prefix read env; we only know what the caller or
