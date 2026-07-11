@@ -223,14 +223,26 @@ impl CronRegistry {
         F: FnMut(&CronEntry),
     {
         let due = self.due_entries();
-        let count = due.len() as u32;
+        let mut count = 0u32;
         for entry in &due {
-            on_due(entry);
+            let current = match self.get(&entry.cron_id) {
+                Some(e) if e.enabled => e,
+                _ => continue,
+            };
+            on_due(&current);
             if let Err(e) = self.record_run(&entry.cron_id) {
                 return Err(e);
             }
+            count += 1;
         }
         Ok(count)
+    }
+
+    fn stop_requested(stop_rx: &std::sync::mpsc::Receiver<()>) -> bool {
+        matches!(
+            stop_rx.try_recv(),
+            Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected)
+        )
     }
 
     /// Spawn a tokio task that ticks every `interval_secs` seconds,
@@ -242,6 +254,7 @@ impl CronRegistry {
     pub fn spawn_tick_loop<F>(
         self: std::sync::Arc<Self>,
         interval_secs: u64,
+        stop_rx: std::sync::mpsc::Receiver<()>,
         mut on_due: F,
     ) -> tokio::task::JoinHandle<()>
     where
@@ -250,8 +263,13 @@ impl CronRegistry {
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
             loop {
+                if Self::stop_requested(&stop_rx) {
+                    break;
+                }
                 ticker.tick().await;
-                let _ = self.tick(&mut on_due);
+                if let Err(e) = self.tick(&mut on_due) {
+                    eprintln!("cron registry tick error: {e}");
+                }
             }
         })
     }
@@ -269,14 +287,14 @@ impl CronRegistry {
     where
         F: FnMut(&CronEntry) + Send + 'static,
     {
-        std::thread::spawn(move || {
-            loop {
-                if stop_rx.try_recv().is_ok() {
-                    break;
-                }
-                let _ = self.tick(&mut on_due);
-                std::thread::sleep(std::time::Duration::from_secs(interval_secs));
+        std::thread::spawn(move || loop {
+            if Self::stop_requested(&stop_rx) {
+                break;
             }
+            if let Err(e) = self.tick(&mut on_due) {
+                eprintln!("cron registry tick error: {e}");
+            }
+            std::thread::sleep(std::time::Duration::from_secs(interval_secs));
         })
     }
 
