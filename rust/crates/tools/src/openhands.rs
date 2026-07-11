@@ -391,8 +391,8 @@ mod tests {
                 .unwrap_or_default();
             // No "Bearer " prefix expected — just the raw key.
             let value = auth
-                .splitn(2, ':')
-                .nth(1)
+                .split_once(':')
+                .map(|x| x.1)
                 .map(str::trim)
                 .unwrap_or_default();
             assert_eq!(value, "sess-abc-123", "auth header was: {auth}");
