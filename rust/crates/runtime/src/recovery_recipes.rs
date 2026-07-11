@@ -197,7 +197,7 @@ pub struct RecoveryStatusReport {
 /// Holds per-scenario attempt counts, a structured event log, a recovery
 /// attempt ledger, and an optional simulation knob for controlling step
 /// outcomes during tests.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RecoveryContext {
     attempts: HashMap<FailureScenario, u32>,
     events: Vec<RecoveryEvent>,
