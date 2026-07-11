@@ -262,6 +262,7 @@ async fn orchestrate_handler(
         subagent_type: Some(String::from("vibe-orchestrator")),
         name: None,
         model: None,
+        cwd: Some(route.worktree.clone()),
     };
     let sdk_result = tools::agent_sdk_bridge::run_agent_sdk_bridge(&bridge)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;

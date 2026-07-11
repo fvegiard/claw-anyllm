@@ -230,7 +230,7 @@ async function main(): Promise<void> {
       };
 
   process.stdout.write(`${JSON.stringify(output)}\n`);
-  process.exit(output.status === "error" ? 1 : 0);
+  process.exit(output.status === "completed" ? 0 : 1);
 }
 
 main().catch((error: unknown) => {

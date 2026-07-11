@@ -68,6 +68,10 @@ pub fn list_fleet_workers(claw_home: &Path) -> Vec<FleetWorker> {
     load_fleet_state(claw_home).workers
 }
 
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
 fn now_secs() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -158,8 +162,11 @@ pub fn spawn_fleet_worker(
         }
     }
 
-    let escaped_prompt = request.prompt.replace('\'', "'\\''");
-    let claw_cmd = format!("zsh -l -c 'claw --output-format json prompt \"{escaped_prompt}\"'");
+    let claw_inner = format!(
+        "claw --output-format json prompt {}",
+        shell_single_quote(&request.prompt)
+    );
+    let claw_cmd = format!("zsh -l -c {}", shell_single_quote(&claw_inner));
     let tmux_cmd = format!(
         "tmux new-session -d -s {tmux_session} -c {} {claw_cmd}",
         worktree_dir.display()
@@ -180,7 +187,11 @@ pub fn spawn_fleet_worker(
         tmux_session,
         created_at: now_secs(),
     };
-    state.workers.push(worker.clone());
+    if let Some(existing) = state.workers.iter_mut().find(|w| w.id == id) {
+        *existing = worker.clone();
+    } else {
+        state.workers.push(worker.clone());
+    }
     save_fleet_state(claw_home, &state)?;
 
     Ok(FleetSpawnResult {

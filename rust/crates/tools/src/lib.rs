@@ -4176,6 +4176,7 @@ fn execute_agent_via_sdk_bridge(input: AgentInput) -> Result<AgentOutput, String
         subagent_type: input.subagent_type.clone(),
         name: input.name.clone(),
         model: input.model.clone(),
+        cwd: None,
     };
     let raw = run_agent_sdk_bridge(&bridge_input)?;
     let parsed: serde_json::Value = serde_json::from_str(&raw)

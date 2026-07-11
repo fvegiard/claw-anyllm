@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import { appendProgress, loadPrd, verifyBeforeComplete } from "./ralph.js";
-import { loadTodos, saveTodos, todosIncomplete } from "./todos.js";
+import { loadTodos, saveTodos, syncTodosFromToolUse, todosIncomplete } from "./todos.js";
 
 const MAX_REVISION_ATTEMPTS = 5;
 let revisionAttempts = 0;
@@ -50,6 +50,20 @@ const stopHook: HookCallback = async (input) => {
   return { decision: "continue" };
 };
 
+const postTodoWrite: HookCallback = async (input) => {
+  const record = input as {
+    cwd?: string;
+    tool_name?: string;
+    tool_input?: Record<string, unknown>;
+  };
+  if (record.tool_name !== "TodoWrite" || !record.tool_input) {
+    return {};
+  }
+  const cwd = projectRoot(record.cwd ?? process.cwd());
+  syncTodosFromToolUse(cwd, record.tool_input);
+  return {};
+};
+
 const sessionStart: HookCallback = async (input) => {
   const cwd = projectRoot((input as { cwd?: string }).cwd ?? process.cwd());
   const prd = loadPrd(cwd, "User orchestration session");
@@ -58,6 +72,7 @@ const sessionStart: HookCallback = async (input) => {
 };
 
 export const revisionHooks = {
+  PostToolUse: [{ matcher: "TodoWrite", hooks: [postTodoWrite] }],
   PostToolUseFailure: [{ hooks: [postToolFailure] }],
   Stop: [{ hooks: [stopHook] }],
   SessionStart: [{ hooks: [sessionStart] }],
