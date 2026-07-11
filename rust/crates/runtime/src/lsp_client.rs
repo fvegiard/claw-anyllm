@@ -104,6 +104,19 @@ pub struct LspServerState {
     pub root_path: Option<String>,
     pub capabilities: Vec<String>,
     pub diagnostics: Vec<LspDiagnostic>,
+    /// Binary path used to spawn the LSP server process.
+    /// `None` means the server is registered but not yet started.
+    /// Skipped during serde (set at runtime, not persisted).
+    #[serde(skip, default)]
+    pub lsp_command: Option<String>,
+    /// Arguments passed to the LSP server binary.
+    /// Skipped during serde.
+    #[serde(skip, default)]
+    pub lsp_args: Vec<String>,
+    /// Process ID of the spawned LSP server, if any.
+    /// Skipped during serde.
+    #[serde(skip, default)]
+    pub lsp_pid: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default)]
