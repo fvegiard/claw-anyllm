@@ -291,7 +291,7 @@ pub struct Worker {
     /// counters (e.g. attempt timestamps). On reload, a fresh
     /// `RecoveryContext::new()` is materialized via the `Default` impl.
     #[serde(skip, default)]
-    pub recovery_context: runtime::recovery_recipes::RecoveryContext,
+    pub recovery_context: crate::recovery_recipes::RecoveryContext,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -342,7 +342,7 @@ impl WorkerRegistry {
             created_at: ts,
             updated_at: ts,
             events: Vec::new(),
-            recovery_context: runtime::recovery_recipes::RecoveryContext::new(),
+            recovery_context: crate::recovery_recipes::RecoveryContext::new(),
         };
         push_event(
             &mut worker,
@@ -867,8 +867,8 @@ impl WorkerRegistry {
     pub fn attempt_recovery_for(
         &self,
         worker_id: &str,
-    ) -> Result<runtime::recovery_recipes::RecoveryResult, String> {
-        use runtime::recovery_recipes::{
+    ) -> Result<crate::recovery_recipes::RecoveryResult, String> {
+        use crate::recovery_recipes::{
             attempt_recovery, FailureScenario,
         };
         let mut inner = self.inner.lock().expect("worker registry lock poisoned");
@@ -892,7 +892,7 @@ impl WorkerRegistry {
     pub fn recovery_ledger(
         &self,
         worker_id: &str,
-    ) -> Result<Vec<runtime::recovery_recipes::RecoveryLedgerEntry>, String> {
+    ) -> Result<Vec<crate::recovery_recipes::RecoveryLedgerEntry>, String> {
         let inner = self.inner.lock().expect("worker registry lock poisoned");
         let worker = inner
             .workers
@@ -916,9 +916,9 @@ impl WorkerRegistry {
     pub fn lane_event_for_failure(
         &self,
         worker_id: &str,
-        provenance: runtime::lane_events::EventProvenance,
-    ) -> Result<runtime::lane_events::LaneEvent, String> {
-        use runtime::lane_events::{
+        provenance: crate::lane_events::EventProvenance,
+    ) -> Result<crate::lane_events::LaneEvent, String> {
+        use crate::lane_events::{
             LaneEventBuilder, LaneEventName, LaneEventStatus, LaneFailureClass,
         };
         let inner = self.inner.lock().expect("worker registry lock poisoned");
