@@ -284,6 +284,14 @@ pub struct Worker {
     pub created_at: u64,
     pub updated_at: u64,
     pub events: Vec<WorkerEvent>,
+    /// Per-worker recovery ledger: tracks one attempt per `FailureScenario`.
+    ///
+    /// Skipped during serde (Serialize/Deserialize) because the recovery
+    /// context is in-memory only and contains non-deterministic
+    /// counters (e.g. attempt timestamps). On reload, a fresh
+    /// `RecoveryContext::new()` is materialized via the `Default` impl.
+    #[serde(skip, default)]
+    pub recovery_context: runtime::recovery_recipes::RecoveryContext,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -334,6 +342,7 @@ impl WorkerRegistry {
             created_at: ts,
             updated_at: ts,
             events: Vec::new(),
+            recovery_context: runtime::recovery_recipes::RecoveryContext::new(),
         };
         push_event(
             &mut worker,
@@ -835,6 +844,113 @@ impl WorkerRegistry {
         );
 
         Ok(worker.clone())
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // B1 (inspect lane): wire attempt_recovery + LaneEventBuilder into
+    // the worker boot path. These helpers let callers translate a
+    // recorded `WorkerFailure` into a typed `FailureScenario`, run a
+    // single automatic recovery attempt, and emit a structured lane
+    // event. The methods are additive — they do NOT mutate worker
+    // state in a way that changes existing behavior. Callers must
+    // invoke them explicitly (e.g. from a control-plane loop or a
+    // higher-level `LiveCli` integration).
+    // ────────────────────────────────────────────────────────────────
+
+    /// Run a single automatic recovery attempt for the worker's
+    /// current `last_error` (if any) and store the resulting ledger
+    /// entry in `worker.recovery_context`.
+    ///
+    /// Returns `Err` if the worker is unknown or has no current
+    /// `last_error`. Returns the `RecoveryResult` (which is one of
+    /// `Recovered`, `NeedsEscalation`, or `NoOp`) for the caller to act on.
+    pub fn attempt_recovery_for(
+        &self,
+        worker_id: &str,
+    ) -> Result<runtime::recovery_recipes::RecoveryResult, String> {
+        use runtime::recovery_recipes::{
+            attempt_recovery, FailureScenario,
+        };
+        let mut inner = self.inner.lock().expect("worker registry lock poisoned");
+        let worker = inner
+            .workers
+            .get_mut(worker_id)
+            .ok_or_else(|| format!("worker not found: {worker_id}"))?;
+
+        let failure = worker
+            .last_error
+            .clone()
+            .ok_or_else(|| format!("worker {worker_id} has no current failure"))?;
+        let scenario = FailureScenario::from_worker_failure_kind(failure.kind);
+        let result = attempt_recovery(&scenario, &mut worker.recovery_context);
+        worker.updated_at = now_secs();
+        Ok(result)
+    }
+
+    /// Read-only view of the per-scenario recovery ledger entries
+    /// that have been recorded for this worker.
+    pub fn recovery_ledger(
+        &self,
+        worker_id: &str,
+    ) -> Result<Vec<runtime::recovery_recipes::RecoveryLedgerEntry>, String> {
+        let inner = self.inner.lock().expect("worker registry lock poisoned");
+        let worker = inner
+            .workers
+            .get(worker_id)
+            .ok_or_else(|| format!("worker not found: {worker_id}"))?;
+        Ok(worker
+            .recovery_context
+            .ledger_entries()
+            .into_iter()
+            .cloned()
+            .collect())
+    }
+
+    /// Build a `LaneEvent` (`LaneEventName::Failed` + matching
+    /// `LaneFailureClass`) from the worker's current `last_error`.
+    ///
+    /// Returns `Err` if the worker is unknown or has no current
+    /// `last_error`. The `seq` is set to the worker's event count so
+    /// the lane event is naturally ordered after the worker's own
+    /// `WorkerEvent`s.
+    pub fn lane_event_for_failure(
+        &self,
+        worker_id: &str,
+        provenance: runtime::lane_events::EventProvenance,
+    ) -> Result<runtime::lane_events::LaneEvent, String> {
+        use runtime::lane_events::{
+            LaneEventBuilder, LaneEventName, LaneEventStatus, LaneFailureClass,
+        };
+        let inner = self.inner.lock().expect("worker registry lock poisoned");
+        let worker = inner
+            .workers
+            .get(worker_id)
+            .ok_or_else(|| format!("worker not found: {worker_id}"))?;
+        let failure = worker
+            .last_error
+            .clone()
+            .ok_or_else(|| format!("worker {worker_id} has no current failure"))?;
+
+        let failure_class = match failure.kind {
+            WorkerFailureKind::TrustGate => LaneFailureClass::TrustGate,
+            WorkerFailureKind::ToolPermissionGate => LaneFailureClass::ToolRuntime,
+            WorkerFailureKind::PromptDelivery => LaneFailureClass::PromptDelivery,
+            WorkerFailureKind::Protocol => LaneFailureClass::GatewayRouting,
+            WorkerFailureKind::Provider => LaneFailureClass::Infra,
+            WorkerFailureKind::StartupNoEvidence => LaneFailureClass::Infra,
+        };
+        let seq = worker.events.len() as u64;
+        let event = LaneEventBuilder::new(
+            LaneEventName::Failed,
+            LaneEventStatus::Failed,
+            now_secs().to_string(),
+            seq,
+            provenance,
+        )
+        .with_failure_class(failure_class)
+        .with_detail(failure.message.clone())
+        .build();
+        Ok(event)
     }
 }
 
