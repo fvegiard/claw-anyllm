@@ -671,6 +671,7 @@ impl WorkerRegistry {
         worker.prompt_delivery_attempts = 0;
         worker.prompt_in_flight = false;
         worker.prompt_sent_at = None;
+        worker.recovery_context = runtime::recovery_recipes::RecoveryContext::new();
         push_event(
             worker,
             WorkerEventKind::Restarted,
@@ -868,9 +869,7 @@ impl WorkerRegistry {
         &self,
         worker_id: &str,
     ) -> Result<runtime::recovery_recipes::RecoveryResult, String> {
-        use runtime::recovery_recipes::{
-            attempt_recovery, FailureScenario,
-        };
+        use runtime::recovery_recipes::{attempt_recovery, FailureScenario};
         let mut inner = self.inner.lock().expect("worker registry lock poisoned");
         let worker = inner
             .workers
@@ -939,7 +938,7 @@ impl WorkerRegistry {
             WorkerFailureKind::Provider => LaneFailureClass::Infra,
             WorkerFailureKind::StartupNoEvidence => LaneFailureClass::Infra,
         };
-        let seq = worker.events.len() as u64;
+        let seq = worker.events.len() as u64 + 1;
         let event = LaneEventBuilder::new(
             LaneEventName::Failed,
             LaneEventStatus::Failed,
