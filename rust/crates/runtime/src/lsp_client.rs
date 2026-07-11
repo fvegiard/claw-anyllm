@@ -138,8 +138,70 @@ impl LspRegistry {
                 root_path: root_path.map(str::to_owned),
                 capabilities,
                 diagnostics: Vec::new(),
+                lsp_command: None,
+                lsp_args: Vec::new(),
+                lsp_pid: None,
             },
         );
+    }
+
+    /// Mark a server as `Starting` and record the binary path + args that
+    /// would be used to spawn it. Does NOT actually spawn a process.
+    ///
+    /// Real process spawning is intentionally left to a future PR — this
+    /// method sets up the registry state so that downstream consumers can
+    /// observe intent and dispatchers can refuse actions against servers
+    /// that have not been started.
+    ///
+    /// Returns `Err` if the language is not registered.
+    pub fn start(
+        &self,
+        language: &str,
+        command: &str,
+        args: Vec<String>,
+    ) -> Result<LspServerState, String> {
+        let mut inner = self.inner.lock().expect("lsp registry lock poisoned");
+        let server = inner
+            .servers
+            .get_mut(language)
+            .ok_or_else(|| format!("LSP server not found for language: {language}"))?;
+        if command.is_empty() {
+            return Err(format!("empty command for LSP server: {language}"));
+        }
+        server.status = LspServerStatus::Starting;
+        server.lsp_command = Some(command.to_owned());
+        server.lsp_args = args;
+        server.lsp_pid = None;
+        Ok(server.clone())
+    }
+
+    /// Returns `true` if the given language has a registered server
+    /// that has been started (i.e. has a non-empty `lsp_command`).
+    #[must_use]
+    pub fn is_running(&self, language: &str) -> bool {
+        let inner = self.inner.lock().expect("lsp registry lock poisoned");
+        inner
+            .servers
+            .get(language)
+            .map(|s| s.lsp_command.is_some())
+            .unwrap_or(false)
+    }
+
+    /// Stop a started server. Clears `lsp_command`, `lsp_args`, and `lsp_pid`
+    /// and sets status to `Disconnected`. Returns the previous state for
+    /// auditing.
+    pub fn stop(&self, language: &str) -> Result<LspServerState, String> {
+        let mut inner = self.inner.lock().expect("lsp registry lock poisoned");
+        let server = inner
+            .servers
+            .get_mut(language)
+            .ok_or_else(|| format!("LSP server not found for language: {language}"))?;
+        let prev = server.clone();
+        server.lsp_command = None;
+        server.lsp_args.clear();
+        server.lsp_pid = None;
+        server.status = LspServerStatus::Disconnected;
+        Ok(prev)
     }
 
     pub fn get(&self, language: &str) -> Option<LspServerState> {

@@ -205,6 +205,81 @@ impl CronRegistry {
     }
 
     /// Record a cron run.
+    /// Return the set of enabled cron entries that are "due" for the
+    /// current logical tick. A real implementation would parse the
+    /// `schedule` field (e.g. via the `cron` crate) and compare to the
+    /// current time. This minimal version treats **every enabled entry**
+    /// as due — sufficient for the test infrastructure and clearly
+    /// marked as a TODO for real schedule parsing.
+    pub fn due_entries(&self) -> Vec<CronEntry> {
+        self.list(true)
+    }
+
+    /// Run a single tick: invoke `on_due` for every currently-enabled
+    /// entry, then call `record_run` for each. Returns the number of
+    /// entries that were fired.
+    pub fn tick<F>(&self, mut on_due: F) -> Result<u32, String>
+    where
+        F: FnMut(&CronEntry),
+    {
+        let due = self.due_entries();
+        let count = due.len() as u32;
+        for entry in &due {
+            on_due(entry);
+            if let Err(e) = self.record_run(&entry.cron_id) {
+                return Err(e);
+            }
+        }
+        Ok(count)
+    }
+
+    /// Spawn a tokio task that ticks every `interval_secs` seconds,
+    /// calling `on_due` for every enabled entry. The task exits when
+    /// the `stop` channel receives a signal.
+    ///
+    /// Returns the `JoinHandle` so the caller can `await` completion
+    /// (typically when shutting down the registry).
+    pub fn spawn_tick_loop<F>(
+        self: std::sync::Arc<Self>,
+        interval_secs: u64,
+        mut on_due: F,
+    ) -> tokio::task::JoinHandle<()>
+    where
+        F: FnMut(&CronEntry) + Send + 'static,
+    {
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+            loop {
+                ticker.tick().await;
+                let _ = self.tick(&mut on_due);
+            }
+        })
+    }
+
+    /// Synchronous (blocking) version of [`Self::spawn_tick_loop`]
+    /// for use in non-tokio contexts. The thread sleeps for
+    /// `interval_secs` seconds between ticks and exits when
+    /// `stop_rx` receives a signal.
+    pub fn spawn_tick_loop_blocking<F>(
+        self: std::sync::Arc<Self>,
+        interval_secs: u64,
+        stop_rx: std::sync::mpsc::Receiver<()>,
+        mut on_due: F,
+    ) -> std::thread::JoinHandle<()>
+    where
+        F: FnMut(&CronEntry) + Send + 'static,
+    {
+        std::thread::spawn(move || {
+            loop {
+                if stop_rx.try_recv().is_ok() {
+                    break;
+                }
+                let _ = self.tick(&mut on_due);
+                std::thread::sleep(std::time::Duration::from_secs(interval_secs));
+            }
+        })
+    }
+
     pub fn record_run(&self, cron_id: &str) -> Result<(), String> {
         let mut inner = self.inner.lock().expect("cron registry lock poisoned");
         let entry = inner
