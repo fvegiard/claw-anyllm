@@ -868,9 +868,7 @@ impl WorkerRegistry {
         &self,
         worker_id: &str,
     ) -> Result<crate::recovery_recipes::RecoveryResult, String> {
-        use crate::recovery_recipes::{
-            attempt_recovery, FailureScenario,
-        };
+        use crate::recovery_recipes::{attempt_recovery, FailureScenario};
         let mut inner = self.inner.lock().expect("worker registry lock poisoned");
         let worker = inner
             .workers
