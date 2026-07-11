@@ -1,3 +1,7 @@
+// ApiError carries provider-specific context (status, headers, retry-after) needed at every
+// call site; boxing it would ripple across the whole crate for a style-only lint.
+#![allow(clippy::result_large_err)]
+
 mod client;
 mod error;
 mod http_client;

@@ -181,10 +181,8 @@ where
     ) -> Self {
         let think_mode = feature_config.think_mode();
         if think_mode && !system_prompt.is_empty() {
-            let (augmented, _) = crate::think_mode::assemble_thinking_scaffold(
-                &system_prompt.join("\n\n"),
-                "",
-            );
+            let (augmented, _) =
+                crate::think_mode::assemble_thinking_scaffold(&system_prompt.join("\n\n"), "");
             system_prompt = vec![augmented];
         } else if think_mode {
             let (augmented, _) = crate::think_mode::assemble_thinking_scaffold("", "");

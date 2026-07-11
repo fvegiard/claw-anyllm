@@ -10,10 +10,12 @@ pub mod bash_validation;
 mod bootstrap;
 pub mod branch_lock;
 mod compact;
+pub mod completion_gate;
 mod config;
 pub mod config_validate;
 mod conversation;
 mod file_ops;
+pub mod fleet_spawn;
 pub mod g004_conformance;
 mod git_context;
 pub mod green_contract;
@@ -28,10 +30,12 @@ pub mod mcp_server;
 mod mcp_stdio;
 pub mod mcp_tool_bridge;
 mod oauth;
+pub mod orchestrator_health;
 pub mod permission_enforcer;
 mod permissions;
 pub mod plugin_lifecycle;
 mod policy_engine;
+pub mod project_router;
 mod prompt;
 pub mod recovery_recipes;
 mod remote;
@@ -52,6 +56,7 @@ pub mod think_mode;
 #[cfg(test)]
 mod trust_resolver;
 mod usage;
+pub mod vm_runtime;
 pub mod worker_boot;
 
 pub use approval_tokens::{

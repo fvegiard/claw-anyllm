@@ -15,7 +15,6 @@ services:
       dockerfile: crates/claw-rag-service/Dockerfile
     command: ["serve", "--db", "/data/index.sqlite"]
     environment:
-      # Use mock embeddings by default for local dev; override in your shell for real providers.
       CLAW_RAG_MOCK_PROVIDERS: "1"
       CLAW_RAG_DB: "/data/index.sqlite"
       CLAW_RAG_HOST: "0.0.0.0"
@@ -42,9 +41,26 @@ services:
       - qdrant
     volumes:
       - rag-data:/data
-      # Mount example workspace roots under /workspaces
       - ./:/workspaces/main:ro
+
+  claw-vm:
+    build:
+      context: .
+      dockerfile: Containerfile
+    environment:
+      CLAW_VM: "1"
+      CLAW_AGENT_SDK_ORCHESTRATOR: /opt/claw-orchestrator
+      RAG_BASE_URL: http://rag-serve:8787
+    volumes:
+      - claw-vm-projects:/workspace/projects
+      - ./:/workspace/main:ro
+    working_dir: /workspace/projects
+    stdin_open: true
+    tty: true
+    depends_on:
+      - rag-serve
 
 volumes:
   qdrant-storage:
   rag-data:
+  claw-vm-projects:

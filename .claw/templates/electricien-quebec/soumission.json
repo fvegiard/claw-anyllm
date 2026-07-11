@@ -1,0 +1,35 @@
+{
+  "$comment": "Gabarit de soumission. Tous les montants sont des exemples à remplacer — ne jamais inventer un prix ou une quantité sans base réelle.",
+  "numero_soumission": "",
+  "nom_chantier": "",
+  "date_emission": "",
+  "date_validite": "",
+  "entrepreneur": {
+    "nom": "",
+    "numero_licence_rbq": "",
+    "numero_neq": ""
+  },
+  "client": {
+    "nom": "",
+    "adresse": ""
+  },
+  "lignes": [
+    {
+      "description": "",
+      "type": "main_oeuvre | materiel",
+      "quantite": 0,
+      "unite": "heure | unite | pied | boite",
+      "prix_unitaire": 0.0,
+      "sous_total": 0.0
+    }
+  ],
+  "sous_total_avant_taxes": 0.0,
+  "tps_5pct": 0.0,
+  "tvq_9_975pct": 0.0,
+  "total": 0.0,
+  "conditions": [
+    "Soumission valide pour la durée indiquée ci-dessus.",
+    "Travaux électriques sujets à inspection et validation par un maître électricien licencié avant mise sous tension.",
+    "Tout changement de portée fera l'objet d'un avenant écrit."
+  ]
+}

@@ -2,8 +2,6 @@ use std::io::{self, IsTerminal, Write};
 
 use runtime::{save_user_provider_settings, ConfigLoader, RuntimeProviderConfig};
 
-use serde_json;
-
 const PROVIDERS: &[(&str, &str, &str)] = &[
     ("1", "Anthropic", "anthropic"),
     ("2", "xAI / Grok", "xai"),
@@ -38,7 +36,7 @@ const API_KEY_ENV_VARS: &[(&str, &str)] = &[
 
 pub fn run_setup_wizard() -> Result<(), Box<dyn std::error::Error>> {
     if !io::stdin().is_terminal() {
-        return Err("setup wizard requires an interactive terminal".into());
+        return run_setup_non_interactive();
     }
 
     let current = load_current_provider_config();
@@ -68,6 +66,82 @@ pub fn run_setup_wizard() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!();
 
+    Ok(())
+}
+
+/// Bootstrap orchestrator deps inside VM without interactive prompts.
+pub fn run_setup_non_interactive() -> Result<(), Box<dyn std::error::Error>> {
+    bootstrap_orchestrator_npm()?;
+    bootstrap_python_eval()?;
+    bootstrap_ecosystem_mcp()?;
+    Ok(())
+}
+
+fn orchestrator_dir() -> Option<std::path::PathBuf> {
+    if let Ok(path) = std::env::var("CLAW_AGENT_SDK_ORCHESTRATOR") {
+        return Some(std::path::PathBuf::from(path));
+    }
+    let cwd = std::env::current_dir().ok()?;
+    for relative in [
+        "examples/agent-sdk-orchestrator",
+        "../examples/agent-sdk-orchestrator",
+    ] {
+        let candidate = cwd.join(relative);
+        if candidate.join("package.json").is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn bootstrap_orchestrator_npm() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(dir) = orchestrator_dir() else {
+        return Ok(());
+    };
+    if dir.join("node_modules").is_dir() {
+        return Ok(());
+    }
+    let status = std::process::Command::new("npm")
+        .arg("install")
+        .current_dir(&dir)
+        .status()?;
+    if !status.success() {
+        return Err("npm install in agent-sdk-orchestrator failed".into());
+    }
+    Ok(())
+}
+
+fn bootstrap_python_eval() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(dir) = orchestrator_dir() else {
+        return Ok(());
+    };
+    let python_dir = dir.join("python");
+    if !python_dir.join("claw_eval").is_dir() {
+        return Ok(());
+    }
+    let _ = std::process::Command::new("pip3")
+        .args(["install", "-q", "numpy", "pillow"])
+        .status();
+    Ok(())
+}
+
+fn bootstrap_ecosystem_mcp() -> Result<(), Box<dyn std::error::Error>> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let claw_dir = cwd.join(".claw");
+    let settings = claw_dir.join("settings.json");
+    if settings.is_file() {
+        return Ok(());
+    }
+    for starter in [
+        cwd.join("examples/ecosystem-mcp-starter.json"),
+        cwd.join("../examples/ecosystem-mcp-starter.json"),
+    ] {
+        if starter.is_file() {
+            std::fs::create_dir_all(&claw_dir)?;
+            std::fs::copy(&starter, &settings)?;
+            return Ok(());
+        }
+    }
     Ok(())
 }
 

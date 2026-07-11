@@ -20,3 +20,9 @@ Thumbs.db
 # Local config
 .claude.json
 .claw.json
+
+# claw runtime state (project router, fleet, todos) — .claw/skills/ stays tracked
+.claw/projects/
+.claw/projects.json
+.claw/todos.json
+.claw/settings.json

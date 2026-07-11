@@ -1,0 +1,19 @@
+{
+  "$comment": "Notes de visite de chantier.",
+  "nom_chantier": "",
+  "date_visite": "",
+  "visite_par": "",
+  "observations": [],
+  "mesures": [
+    {
+      "description": "",
+      "valeur": "",
+      "unite": ""
+    }
+  ],
+  "photos": [],
+  "risques_ou_anomalies_notees": [
+    "Ex.: à faire vérifier par un maître électricien licencié avant intervention."
+  ],
+  "prochaines_etapes": []
+}
